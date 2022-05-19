@@ -1,0 +1,70 @@
+syntax="proto3";
+
+import "users.proto";
+
+package distributed_agenda;
+option go_package = "./server/proto";
+
+enum OperationOutcome{
+    SUCCESS = 0;
+    FAILED = 1;
+}
+
+message Event{
+    int64 id = 1;
+    User user = 2;
+}
+
+message GetEventRequest{
+    int64 id = 1;
+}
+
+message GetAllUserEventsRequest{
+    User user = 1;
+}
+
+message CreateEventRequest{
+    Event event = 1;
+}
+
+message EditEventRequest{
+    Event event = 1;
+}
+
+message DeleteEventRequest{
+    int64 id = 1;
+}
+
+message GetEventResponse{
+    Event event = 1;
+}
+
+message GetAllUserEventsResponse{
+    Event event = 1;
+}
+
+message CreateEventResponse{
+    OperationOutcome result = 1;
+}
+
+message EditEventResponse{
+    OperationOutcome result = 1;
+}
+
+message DeleteEventResponse{
+    OperationOutcome result = 1;
+}
+
+
+service EventsService{
+
+    rpc GetEvent(GetEventRequest) returns (GetEventResponse){}
+
+    rpc GetAllEvents(GetAllUserEventsRequest) returns (stream GetAllUserEventsResponse){}
+
+    rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse){}
+
+    rpc EditEvent(EditEventRequest) returns (EditEventResponse){}
+
+    rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse){}
+}

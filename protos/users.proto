@@ -1,0 +1,12 @@
+syntax="proto3";
+
+package distributed_agenda;
+option go_package = "./server/proto";
+
+message User{
+    int64 id = 1;
+}
+
+service UserService{
+    
+}
