@@ -3,10 +3,54 @@ syntax="proto3";
 package distributed_agenda;
 option go_package = "./server/proto";
 
+enum OperationOutcome{
+    SUCCESS = 0;
+    FAILED = 1;
+}
+
 message User{
     int64 id = 1;
 }
 
+message GetUserRequest{
+    int64 id = 1;
+}
+
+message CreateUserRequest{
+    User user = 1;
+}
+
+message EditUserRequest{
+    User user = 1;
+}
+
+message DeleteUserRequest{
+    int64 id = 1;
+}
+
+message GetUserResponse{
+    User user = 1;
+}
+
+message CreateUserResponse{
+    OperationOutcome result = 1;
+}
+
+message EditUserResponse{
+    OperationOutcome result = 1;
+}
+
+message DeleteUserResponse{
+    OperationOutcome result = 1;
+}
+
 service UserService{
-    
+
+    rpc GetUser(GetUserRequest) returns (GetUserResponse){}
+
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse){}
+
+    rpc EditUser(EditUserRequest) returns (EditUserResponse){}
+
+    rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse){}
 }

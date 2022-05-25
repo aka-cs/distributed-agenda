@@ -5,11 +5,6 @@ import "users.proto";
 package distributed_agenda;
 option go_package = "./server/proto";
 
-enum OperationOutcome{
-    SUCCESS = 0;
-    FAILED = 1;
-}
-
 message Event{
     int64 id = 1;
     User user = 2;
