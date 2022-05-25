@@ -16,7 +16,3 @@
 
 # Goland
 .idea
-
-# Proto generated
-client/proto/*
-server/proto/*
