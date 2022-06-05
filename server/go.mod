@@ -3,6 +3,8 @@ module server
 go 1.18
 
 require (
+	github.com/sirupsen/logrus v1.8.1
+	github.com/t-tomalak/logrus-easy-formatter v0.0.0-20190827215021-c074f06c5816
 	google.golang.org/grpc v1.46.2
 	google.golang.org/protobuf v1.28.0
 )
