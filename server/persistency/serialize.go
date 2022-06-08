@@ -23,6 +23,8 @@ func Save[T any](object T, path string) error {
 
 	dataFile, err := os.Create(fullPath)
 
+	defer closeFile(dataFile)
+
 	if err != nil {
 		log.Errorf("Error creating file:\n%v\n", err)
 		return err
@@ -35,11 +37,6 @@ func Save[T any](object T, path string) error {
 		return err
 	}
 
-	err = dataFile.Close()
-	if err != nil {
-		log.Errorf("Error closing file:\n%v\n", err)
-		return err
-	}
 	return nil
 }
 
@@ -49,6 +46,7 @@ func Load[T any](path string) (T, error) {
 	var empty T
 
 	dataFile, err := os.Open(filepath.Join("resources", path+".bin"))
+	defer closeFile(dataFile)
 
 	if err != nil {
 		log.Errorf("Error opening file:\n%v\n", err)
@@ -63,12 +61,12 @@ func Load[T any](path string) (T, error) {
 		return empty, err
 	}
 
-	err = dataFile.Close()
+	return result, nil
+}
 
+func closeFile(file *os.File) {
+	err := file.Close()
 	if err != nil {
 		log.Errorf("Error closing file:\n%v\n", err)
-		return empty, err
 	}
-
-	return result, nil
 }

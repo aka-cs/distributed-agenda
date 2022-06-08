@@ -41,6 +41,19 @@ func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*p
 	return &proto.GetUserResponse{User: &user}, nil
 }
 
+func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (*proto.EditUserResponse, error) {
+	log.Debugf("Edit user invoked with %v\n", request)
+
+	user := request.GetUser()
+	err := persistency.Save(user, filepath.Join("User", strconv.FormatInt(user.Id, 10)))
+
+	if err != nil {
+		return &proto.EditUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	return &proto.EditUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+}
+
 func StartUserService() {
 	log.Infof("User Service Started")
 
