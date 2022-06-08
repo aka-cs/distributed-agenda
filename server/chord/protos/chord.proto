@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package chord;
+option go_package="./chord";
+
+// Chord service for inter-node communication.
+service Chord {
+  // GetPredecessor returns the node believed to be the current predecessor.
+  rpc GetPredecessor(EmptyRequest) returns (Node);
+  // GetSuccessor returns the node believed to be the current successor.
+  rpc GetSuccessor(EmptyRequest) returns (Node);
+  // FindSuccessor finds the node that succeeds ID.
+  rpc FindSuccessor(ID) returns (Node);
+  // SetPredecessor sets predecessor for a node.
+  rpc SetPredecessor(Node) returns (EmptyRequest);
+  // SetPredecessor sets predecessor for a node.
+  rpc SetSuccessor(Node) returns (EmptyRequest);
+}
+
+message EmptyRequest {}
+
+message ID{
+  bytes ID = 1;
+}
+
+// Node contains a node ID and IP.
+message Node {
+  bytes id = 1;
+  string addr = 2;
+}
