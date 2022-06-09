@@ -202,7 +202,7 @@ func (transport *NodeTransport) GetSuccessor(node *chord.Node) (*chord.Node, err
 }
 
 // FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
-func (transport *NodeTransport) FindSuccessor(node *chord.Node, ID []byte) (*chord.Node, error) {
+func (transport *NodeTransport) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
 	remoteNode, err := transport.Connect(node.Addr) // Establish connection with the remote node.
 	// In case of error, return the error.
 	if err != nil {
@@ -214,5 +214,5 @@ func (transport *NodeTransport) FindSuccessor(node *chord.Node, ID []byte) (*cho
 	defer cancel()
 
 	// Return the result of the remote call.
-	return remoteNode.FindSuccessor(ctx, &chord.ID{ID: ID})
+	return remoteNode.FindSuccessor(ctx, &chord.ID{ID: id})
 }

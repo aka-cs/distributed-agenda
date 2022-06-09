@@ -9,7 +9,7 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
-	transportLayer Transport // Transport layer of the Node.
+	RPC Transport // Transport layer of the Node.
 
 	predecessor *chord.Node  // Predecessor of this Node in the ring.
 	predLock    sync.RWMutex // Locks the predecessor for reading or writing.
@@ -42,9 +42,9 @@ func NewNode(addr string) (*Node, error) {
 
 	// Instantiates the node.
 	node := Node{Node: &innerNode,
-		transportLayer: transport,
-		config:         configuration,
-		fingerTable:    newFingerTable(&innerNode, 160)}
+		RPC:         transport,
+		config:      configuration,
+		fingerTable: newFingerTable(&innerNode, 160)}
 
 	// Return the node.
 	return &node, nil
@@ -84,53 +84,44 @@ func (node *Node) GetSuccessor(ctx context.Context, r *chord.EmptyRequest) (*cho
 
 // FindSuccessor finds the node that succeeds ID.
 func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node, error) {
+	// TODO: Handle the cases in which the predecessor/successor is null.
+	// TODO: Im returning the current node in this cases, but this is sure incorrect.
 	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
 	node.fingerLock.RLock()                       // Lock the FingerTable to read from it.
 	pred := node.fingerTable.closestFinger(id.ID) // Find the successor of this ID in the FingerTable.
 	node.fingerLock.RUnlock()                     // After finishing read, unlock the FingerTable.
 
-	// If the correspondent finger is null, return null.
+	// If the correspondent finger is null, return this node.
 	if pred == nil {
 		return node.Node, nil
 	}
 
 	// If the corresponding finger its itself, the key is stored in its successor.
 	if isEqual(pred.Id, node.Id) {
-		// TODO: Maybe, will be necessary a remote call of GetSuccessor instead of the using of local successor,
-		// TODO: because the local successor is possibly outdated on the moment of this call.
 		// Lock the successor to read it, and unlock it before.
 		node.sucLock.RLock()
 		suc := node.successor
 		node.sucLock.RUnlock()
 
-		/*
-			succ, err = node.getSuccessorRPC(pred)
-			if err != nil {
-				return nil, err
-			}
-			if succ == nil {
-				// not able to wrap around, current node is the successor
-				return pred, nil
-			}
-		*/
+		// If the successor is null, return this node.
+		if suc == nil {
+			return node.Node, nil
+		}
 
 		return suc, nil
 	}
 
-	// TODO: Do a remote call to the FindSuccessor method of the obtained Node.
-	// TODO: Transport layer necessary urgently.
-	/*
-		suc, err := node.findSuccessorRPC(pred, id)
-		if err != nil {
-			return nil, err
-		}
-		if succ == nil {
-			// not able to wrap around, current node is the successor
-			return curr, nil
-		}
-		return succ, nil
-	*/
-	return nil, nil
+	suc, err := node.RPC.FindSuccessor(pred, id.ID) // Find the successor of the remote node obtained.
+	// In case of error, return the obtained error.
+	if err != nil {
+		return nil, err
+	}
+	// If the successor is null, return this node.
+	if suc == nil {
+		return node.Node, nil
+	}
+
+	return suc, nil
 }
 
 // SetPredecessor sets predecessor for a node.
