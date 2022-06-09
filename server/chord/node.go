@@ -1,13 +1,9 @@
-package main
+package chord
 
 import (
 	"DistributedTable/chord"
 	"golang.org/x/net/context"
 	"sync"
-)
-
-var (
-	nullNode = &chord.Node{}
 )
 
 type Node struct {
@@ -47,9 +43,9 @@ func NewNode(addr string) (*Node, error) {
 // GetPredecessor returns the node believed to be the current predecessor.
 func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
 	// Lock the predecessor to read it, and unlock it before.
-	node.predLock.Lock()
+	node.predLock.RLock()
 	pred := node.predecessor
-	node.predLock.Unlock()
+	node.predLock.RUnlock()
 
 	// If predecessor is null, return a null Node.
 	if pred == nil {
@@ -63,25 +59,25 @@ func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*c
 // GetSuccessor returns the node believed to be the current successor.
 func (node *Node) GetSuccessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
 	// Lock the successor to read it, and unlock it before.
-	node.sucLock.Lock()
+	node.sucLock.RLock()
 	suc := node.successor
-	node.sucLock.Unlock()
+	node.sucLock.RUnlock()
 
 	// If successor is null, return a null Node.
 	if suc == nil {
 		return nullNode, nil
 	}
 
-	// Otherwise, return the predecessor of this node.
+	// Otherwise, return the successor of this node.
 	return suc, nil
 }
 
 // FindSuccessor finds the node that succeeds ID.
 func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node, error) {
 	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
-	node.fingerLock.Lock()                        // Lock the FingerTable to read from it.
+	node.fingerLock.RLock()                       // Lock the FingerTable to read from it.
 	pred := node.fingerTable.closestFinger(id.ID) // Find the successor of this ID in the FingerTable.
-	node.fingerLock.Lock()                        // Unlock the FingerTable.
+	node.fingerLock.RLock()                       // Unlock the FingerTable.
 
 	// If the correspondent finger is null, return null.
 	if pred == nil {
@@ -93,9 +89,9 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 		// TODO: Maybe, will be necessary a remote call of GetSuccessor instead of the using of local successor,
 		// TODO: because the local successor its possibly outdated on the moment of this call.
 		// Lock the successor to read it, and unlock it before.
-		node.sucLock.Lock()
+		node.sucLock.RLock()
 		suc := node.successor
-		node.sucLock.Unlock()
+		node.sucLock.RUnlock()
 
 		/*
 			succ, err = node.getSuccessorRPC(pred)
