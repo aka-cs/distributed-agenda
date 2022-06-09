@@ -21,8 +21,14 @@ type Configuration struct {
 
 // DefaultConfig returns a default configuration.
 func DefaultConfig() *Configuration {
+	Hash := sha1.New
+	HashSize := Hash().Size()
+	DialOpts := []grpc.DialOption{grpc.WithInsecure()}
+
 	config := &Configuration{
-		Hash: sha1.New,
+		Hash:     sha1.New,
+		HashSize: HashSize,
+		DialOpts: DialOpts,
 	}
 
 	config.HashSize = config.Hash().Size()
