@@ -3,7 +3,6 @@ package chord
 import (
 	"DistributedTable/chord"
 	"errors"
-	"fmt"
 	"google.golang.org/grpc"
 	"sync"
 	"sync/atomic"
@@ -48,26 +47,31 @@ type NodeConnection struct {
 	lastActive time.Time          // Last time the connection was used.
 }
 
+// Close the connection in NodeConnection.
+func (connection *NodeConnection) Close() {
+	err := connection.conn.Close()
+	if err != nil {
+		return
+	}
+}
+
 // NodeTransport implements the Transport interface, for Chord services.
 type NodeTransport struct {
 	*Configuration // Transport service configurations.
 
 	connections    map[string]*NodeConnection // Dictionary of <address, open connection>.
-	connectionsMtx sync.RWMutex               // Locks the dictionary for reading or writing if another routine is doing it.
+	connectionsMtx sync.RWMutex               // Locks the dictionary for reading or writing.
 
-	shutdown int32 // Determine if the transport service is actually running.
+	running int32 // Determine if the transport service is actually running.
 }
 
 // NewNodeTransport creates a new NodeTransport object.
 func NewNodeTransport(config *Configuration) (*NodeTransport, error) {
-	// Create the dictionary of <address, open connection>.
-	connections := make(map[string]*NodeConnection)
-
 	// Create the NodeTransport object.
 	transport := &NodeTransport{
 		Configuration: config,
-		connections:   connections,
-		shutdown:      0,
+		connections:   nil,
+		running:       0,
 	}
 
 	// Return the NodeTransport object.
@@ -77,15 +81,15 @@ func NewNodeTransport(config *Configuration) (*NodeTransport, error) {
 // Connect with a remote address.
 func (transport *NodeTransport) Connect(addr string) (*NodeConnection, error) {
 	// Check if the transport service is shutdown, and if condition holds return and report it.
-	if atomic.LoadInt32(&transport.shutdown) == 1 {
-		return nil, fmt.Errorf("TCP transport is shutdown")
+	if atomic.LoadInt32(&transport.running) == 0 {
+		return nil, errors.New("must start transport service first")
 	}
 
 	transport.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it before.
 	// Checks if the dictionary is instantiated. If condition not holds return the error.
 	if transport.connections == nil {
 		transport.connectionsMtx.Unlock()
-		return nil, errors.New("must instantiate node before using")
+		return nil, errors.New("must start transport service first")
 	}
 	nodeConnection, ok := transport.connections[addr]
 	transport.connectionsMtx.RUnlock()
@@ -114,4 +118,51 @@ func (transport *NodeTransport) Connect(addr string) (*NodeConnection, error) {
 
 	// Return the correspondent NodeConnection.
 	return nodeConnection, nil
+}
+
+// CloseOldConnections close the old open connections.
+func (transport *NodeTransport) CloseOldConnections() {
+	ticker := time.NewTicker(60 * time.Second) // Set the time between routine activations.
+
+	for {
+		select {
+		case <-ticker.C:
+			// If the transport service is shutdown, do nothing.
+			if atomic.LoadInt32(&transport.running) == 0 {
+				return
+			}
+			transport.connectionsMtx.Lock() // Lock the dictionary to write on it.
+			// For NodeConnection on the dictionary, if its lifetime is over, close the connection.
+			for addr, connection := range transport.connections {
+				if time.Since(connection.lastActive) > transport.MaxIdle {
+					connection.Close()
+					delete(transport.connections, addr) // Delete the <address, connection> pair of the dictionary.
+				}
+			}
+			transport.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
+		}
+	}
+}
+
+// Start the transport service.
+func (transport *NodeTransport) Start() {
+	transport.connections = make(map[string]*NodeConnection) // Create the dictionary of <address, open connection>.
+	atomic.StoreInt32(&transport.running, 1)                 // Report the service is running.
+	go transport.CloseOldConnections()                       // Check and close old connections periodically.
+}
+
+// Stop the transport service.
+func (transport *NodeTransport) Stop() {
+	atomic.StoreInt32(&transport.running, 0) // Report the service is shutdown.
+
+	// Close all the connections
+	transport.connectionsMtx.Lock() // Lock the dictionary to write on it.
+	// For NodeConnection on the dictionary, if its lifetime is over, close the connection.
+	for _, connection := range transport.connections {
+		if time.Since(connection.lastActive) > transport.MaxIdle {
+			connection.Close()
+		}
+	}
+	transport.connections = nil       // Delete dictionary of connections.
+	transport.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 }

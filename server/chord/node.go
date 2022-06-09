@@ -10,12 +10,12 @@ type Node struct {
 	*chord.Node // Real Node.
 
 	predecessor *chord.Node  // Predecessor of this Node in the ring.
-	predLock    sync.RWMutex // Locks the predecessor for reading if another routine is reading it.
+	predLock    sync.RWMutex // Locks the predecessor for reading or writing.
 	successor   *chord.Node  // Successor of this Node in the ring.
-	sucLock     sync.RWMutex // Locks the successor for reading if another routine is reading it.
+	sucLock     sync.RWMutex // Locks the successor for reading or writing.
 
 	fingerTable *FingerTable // FingerTable of this Node.
-	fingerLock  sync.RWMutex // Locks the FingerTable for reading or writing if another routine is doing it.
+	fingerLock  sync.RWMutex // Locks the FingerTable for reading or writing.
 
 	config *Configuration // General configurations.
 }
@@ -77,7 +77,7 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
 	node.fingerLock.RLock()                       // Lock the FingerTable to read from it.
 	pred := node.fingerTable.closestFinger(id.ID) // Find the successor of this ID in the FingerTable.
-	node.fingerLock.RLock()                       // Unlock the FingerTable.
+	node.fingerLock.RUnlock()                     // After finishing read, unlock the FingerTable.
 
 	// If the correspondent finger is null, return null.
 	if pred == nil {
