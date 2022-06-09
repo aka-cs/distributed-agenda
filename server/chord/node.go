@@ -9,6 +9,8 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
+	transportLayer Transport // Transport layer of the Node.
+
 	predecessor *chord.Node  // Predecessor of this Node in the ring.
 	predLock    sync.RWMutex // Locks the predecessor for reading or writing.
 	successor   *chord.Node  // Successor of this Node in the ring.
@@ -32,9 +34,17 @@ func NewNode(addr string) (*Node, error) {
 		return nil, err
 	}
 
-	// Else, creates the new node with the obtained ID and same address.
+	// Creates the new node with the obtained ID and same address.
 	innerNode := chord.Node{Id: id, Addr: addr}
-	node := Node{Node: &innerNode, config: configuration, fingerTable: newFingerTable(&innerNode, 160)}
+
+	// Creates the transport layer.
+	transport := NewNodeTransport(configuration)
+
+	// Instantiates the node.
+	node := Node{Node: &innerNode,
+		transportLayer: transport,
+		config:         configuration,
+		fingerTable:    newFingerTable(&innerNode, 160)}
 
 	// Return the node.
 	return &node, nil
@@ -87,7 +97,7 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 	// If the corresponding finger its itself, the key is stored in its successor.
 	if isEqual(pred.Id, node.Id) {
 		// TODO: Maybe, will be necessary a remote call of GetSuccessor instead of the using of local successor,
-		// TODO: because the local successor its possibly outdated on the moment of this call.
+		// TODO: because the local successor is possibly outdated on the moment of this call.
 		// Lock the successor to read it, and unlock it before.
 		node.sucLock.RLock()
 		suc := node.successor
