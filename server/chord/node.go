@@ -124,7 +124,20 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 	return suc, nil
 }
 
-// SetPredecessor sets predecessor for a node.
-// rpc SetPredecessor(Node) returns (nil)
-// SetPredecessor sets predecessor for a node.
-// rpc SetSuccessor(Node) returns (nil)
+// SetPredecessor sets the predecessor of a node.
+func (node *Node) SetPredecessor(ctx context.Context, pred *chord.Node) (*chord.EmptyRequest, error) {
+	// Lock the predecessor to write on it, and unlock it before.
+	node.predLock.Lock()
+	node.predecessor = pred
+	node.predLock.Unlock()
+	return emptyRequest, nil
+}
+
+// SetSuccessor sets predecessor for a node.
+func (node *Node) SetSuccessor(ctx context.Context, suc *chord.Node) (*chord.EmptyRequest, error) {
+	// Lock the successor to write on it, and unlock it before.
+	node.sucLock.Lock()
+	node.successor = suc
+	node.sucLock.Unlock()
+	return emptyRequest, nil
+}

@@ -11,19 +11,21 @@ service Chord {
   rpc GetSuccessor(EmptyRequest) returns (Node);
   // FindSuccessor finds the node that succeeds ID.
   rpc FindSuccessor(ID) returns (Node);
-  // SetPredecessor sets predecessor for a node.
+  // SetPredecessor sets the predecessor of a node.
   rpc SetPredecessor(Node) returns (EmptyRequest);
-  // SetPredecessor sets predecessor for a node.
+  // SetSuccessor sets the successor of a node.
   rpc SetSuccessor(Node) returns (EmptyRequest);
 }
 
+// Empty request for null parameters and returns.
 message EmptyRequest {}
 
+// Identifier of a node.
 message ID{
   bytes ID = 1;
 }
 
-// Node contains a node ID and IP.
+// Node contains a node ID and an address.
 message Node {
   bytes id = 1;
   string addr = 2;
