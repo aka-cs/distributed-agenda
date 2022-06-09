@@ -9,7 +9,7 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
-	RPC Transport // Transport layer of the Node.
+	RPC RemoteServices // Transport layer of the Node.
 
 	predecessor *chord.Node  // Predecessor of this Node in the ring.
 	predLock    sync.RWMutex // Locks the predecessor for reading or writing.
@@ -38,7 +38,7 @@ func NewNode(addr string) (*Node, error) {
 	innerNode := chord.Node{Id: id, Addr: addr}
 
 	// Creates the transport layer.
-	transport := NewNodeTransport(configuration)
+	transport := NewGRPCServices(configuration)
 
 	// Instantiates the node.
 	node := Node{Node: &innerNode,

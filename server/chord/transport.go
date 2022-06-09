@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-// Transport enables a node to interact with other nodes in the ring, as a client of its servers.
-type Transport interface {
-	// Start the GRPC server.
+// RemoteServices enables a node to interact with other nodes in the ring, as a client of its servers.
+type RemoteServices interface {
+	// Start the services.
 	Start()
-	// Stop the GRPC server.
+	// Stop the services.
 	Stop()
 
 	// Chord methods.
@@ -25,13 +25,15 @@ type Transport interface {
 	GetSuccessor(*chord.Node) (*chord.Node, error)
 	// FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
 	FindSuccessor(*chord.Node, []byte) (*chord.Node, error)
+	// SetPredecessor sets the predecessor of a remote Node.
+	SetPredecessor(*chord.Node, *chord.Node) error
+	// SetSuccessor sets the successor of a remote Node.
+	SetSuccessor(*chord.Node, *chord.Node) error
 
 	// TODO: Implement the methods above.
 
 	// Notify(*chord.Node, *chord.Node) error
 	// CheckPredecessor(*chord.Node) error
-	// SetPredecessor(*chord.Node, *chord.Node) error
-	// SetSuccessor(*chord.Node, *chord.Node) error
 }
 
 // Necessary definitions.
@@ -57,51 +59,51 @@ func (connection *RemoteNode) Close() {
 	}
 }
 
-// NodeTransport implements the Transport interface, for Chord services.
-type NodeTransport struct {
-	*Configuration // Transport service configurations.
+// GRPCServices implements the RemoteServices interface, for Chord GRPC services.
+type GRPCServices struct {
+	*Configuration // Remote service configurations.
 
 	connections    map[string]*RemoteNode // Dictionary of <address, open connection>.
 	connectionsMtx sync.RWMutex           // Locks the dictionary for reading or writing.
 
-	running int32 // Determine if the transport service is actually running.
+	running int32 // Determine if the service is actually running.
 }
 
-// NewNodeTransport creates a new NodeTransport object.
-func NewNodeTransport(config *Configuration) *NodeTransport {
-	// Create the NodeTransport object.
-	transport := &NodeTransport{
+// NewGRPCServices creates a new GRPCServices object.
+func NewGRPCServices(config *Configuration) *GRPCServices {
+	// Create the GRPCServices object.
+	services := &GRPCServices{
 		Configuration: config,
 		connections:   nil,
 		running:       0,
 	}
 
-	// Return the NodeTransport object.
-	return transport
+	// Return the GRPCServices object.
+	return services
 }
 
 // Connect with a remote address.
-func (transport *NodeTransport) Connect(addr string) (*RemoteNode, error) {
-	// Check if the transport service is shutdown, and if condition holds return and report it.
-	if atomic.LoadInt32(&transport.running) == 0 {
-		return nil, errors.New("must start transport service first")
+func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
+	// Check if the service is shutdown, and if condition holds return and report it.
+	if atomic.LoadInt32(&services.running) == 0 {
+		return nil, errors.New("must start grpc service first")
 	}
 
-	transport.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it before.
+	services.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it before.
 	// Checks if the dictionary is instantiated. If condition not holds return the error.
-	if transport.connections == nil {
-		transport.connectionsMtx.Unlock()
-		return nil, errors.New("must start transport service first")
+	if services.connections == nil {
+		services.connectionsMtx.Unlock()
+		return nil, errors.New("must start grpc service first")
 	}
-	remoteNode, ok := transport.connections[addr]
-	transport.connectionsMtx.RUnlock()
+	remoteNode, ok := services.connections[addr]
+	services.connectionsMtx.RUnlock()
 
 	// Check if the connection is already alive, and if condition holds return the connection.
 	if ok {
 		return remoteNode, nil
 	}
 
-	conn, err := grpc.Dial(addr, transport.DialOpts...) // Establish the connection.
+	conn, err := grpc.Dial(addr, services.DialOpts...) // Establish the connection.
 
 	// Check if the connection was successfully. If condition not holds return the error.
 	if err != nil {
@@ -114,71 +116,71 @@ func (transport *NodeTransport) Connect(addr string) (*RemoteNode, error) {
 		conn,
 		time.Now()} // Wrap the ChordClient on a RemoteNode struct.
 
-	transport.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it before.
-	transport.connections[addr] = remoteNode
-	transport.connectionsMtx.Unlock()
+	services.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it before.
+	services.connections[addr] = remoteNode
+	services.connectionsMtx.Unlock()
 
 	// Return the correspondent RemoteNode.
 	return remoteNode, nil
 }
 
 // CloseOldConnections close the old open connections.
-func (transport *NodeTransport) CloseOldConnections() {
+func (services *GRPCServices) CloseOldConnections() {
 	ticker := time.NewTicker(60 * time.Second) // Set the time between routine activations.
 
 	for {
 		select {
 		case <-ticker.C:
-			// If the transport service is shutdown, do nothing.
-			if atomic.LoadInt32(&transport.running) == 0 {
+			// If the services service is shutdown, do nothing.
+			if atomic.LoadInt32(&services.running) == 0 {
 				return
 			}
-			transport.connectionsMtx.Lock() // Lock the dictionary to write on it.
+			services.connectionsMtx.Lock() // Lock the dictionary to write on it.
 			// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
-			for addr, connection := range transport.connections {
-				if time.Since(connection.lastActive) > transport.MaxIdle {
+			for addr, connection := range services.connections {
+				if time.Since(connection.lastActive) > services.MaxIdle {
 					connection.Close()
-					delete(transport.connections, addr) // Delete the <address, connection> pair of the dictionary.
+					delete(services.connections, addr) // Delete the <address, connection> pair of the dictionary.
 				}
 			}
-			transport.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
+			services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 		}
 	}
 }
 
-// Start the transport service.
-func (transport *NodeTransport) Start() {
-	transport.connections = make(map[string]*RemoteNode) // Create the dictionary of <address, open connection>.
-	atomic.StoreInt32(&transport.running, 1)             // Report the service is running.
-	go transport.CloseOldConnections()                   // Check and close old connections periodically.
+// Start the services.
+func (services *GRPCServices) Start() {
+	services.connections = make(map[string]*RemoteNode) // Create the dictionary of <address, open connection>.
+	atomic.StoreInt32(&services.running, 1)             // Report the service is running.
+	go services.CloseOldConnections()                   // Check and close old connections periodically.
 }
 
-// Stop the transport service.
-func (transport *NodeTransport) Stop() {
-	atomic.StoreInt32(&transport.running, 0) // Report the service is shutdown.
+// Stop the services.
+func (services *GRPCServices) Stop() {
+	atomic.StoreInt32(&services.running, 0) // Report the service is shutdown.
 
 	// Close all the connections
-	transport.connectionsMtx.Lock() // Lock the dictionary to write on it.
+	services.connectionsMtx.Lock() // Lock the dictionary to write on it.
 	// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
-	for _, connection := range transport.connections {
-		if time.Since(connection.lastActive) > transport.MaxIdle {
+	for _, connection := range services.connections {
+		if time.Since(connection.lastActive) > services.MaxIdle {
 			connection.Close()
 		}
 	}
-	transport.connections = nil       // Delete dictionary of connections.
-	transport.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
+	services.connections = nil       // Delete dictionary of connections.
+	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 }
 
 // GetPredecessor returns the node believed to be the current predecessor of a remote Node.
-func (transport *NodeTransport) GetPredecessor(node *chord.Node) (*chord.Node, error) {
-	remoteNode, err := transport.Connect(node.Addr) // Establish connection with the remote node.
+func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, error) {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	// In case of error, return the error.
 	if err != nil {
 		return nil, err
 	}
 
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), transport.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
 	defer cancel()
 
 	// Return the result of the remote call.
@@ -186,15 +188,15 @@ func (transport *NodeTransport) GetPredecessor(node *chord.Node) (*chord.Node, e
 }
 
 // GetSuccessor returns the node believed to be the current successor of a remote Node.
-func (transport *NodeTransport) GetSuccessor(node *chord.Node) (*chord.Node, error) {
-	remoteNode, err := transport.Connect(node.Addr) // Establish connection with the remote node.
+func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error) {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	// In case of error, return the error.
 	if err != nil {
 		return nil, err
 	}
 
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), transport.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
 	defer cancel()
 
 	// Return the result of the remote call.
@@ -202,17 +204,51 @@ func (transport *NodeTransport) GetSuccessor(node *chord.Node) (*chord.Node, err
 }
 
 // FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
-func (transport *NodeTransport) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
-	remoteNode, err := transport.Connect(node.Addr) // Establish connection with the remote node.
+func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	// In case of error, return the error.
 	if err != nil {
 		return nil, err
 	}
 
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), transport.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
 	defer cancel()
 
 	// Return the result of the remote call.
 	return remoteNode.FindSuccessor(ctx, &chord.ID{ID: id})
+}
+
+// SetPredecessor sets the predecessor of a remote Node.
+func (services *GRPCServices) SetPredecessor(node *chord.Node, pred *chord.Node) error {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	// In case of error, return the error.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.SetPredecessor(ctx, pred)
+	return err
+}
+
+// SetSuccessor sets the successor of a remote Node.
+func (services *GRPCServices) SetSuccessor(node *chord.Node, suc *chord.Node) error {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	// In case of error, return the error.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.SetSuccessor(ctx, suc)
+	return err
 }
