@@ -131,7 +131,7 @@ func (services *GRPCServices) CloseOldConnections() {
 	for {
 		select {
 		case <-ticker.C:
-			// If the services service is shutdown, do nothing.
+			// If the service is shutdown, return.
 			if atomic.LoadInt32(&services.running) == 0 {
 				return
 			}

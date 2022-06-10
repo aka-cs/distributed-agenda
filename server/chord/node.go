@@ -2,6 +2,7 @@ package chord
 
 import (
 	"DistributedTable/chord"
+	"errors"
 	"golang.org/x/net/context"
 	"sync"
 )
@@ -26,7 +27,7 @@ type Node struct {
 func NewNode(addr string) (*Node, error) {
 	// TODO: Change the default Configuration by an Configuration optional argument.
 	// TODO: Obtain the ring size from the Configuration.
-	configuration := DefaultConfig()       // Obtain the configuration of the Node.
+	configuration := DefaultConfig()       // Obtain the configuration of the node.
 	id, err := configuration.hashKey(addr) // Obtain the ID relative to this address.
 
 	// If we get an error, return error.
@@ -42,6 +43,8 @@ func NewNode(addr string) (*Node, error) {
 
 	// Instantiates the node.
 	node := Node{Node: &innerNode,
+		predecessor: nil,
+		successor:   &innerNode,
 		RPC:         transport,
 		config:      configuration,
 		fingerTable: newFingerTable(&innerNode, 160)}
@@ -50,6 +53,35 @@ func NewNode(addr string) (*Node, error) {
 	return &node, nil
 }
 
+// Join a Node to the Chord ring, using another known Node.
+func (node *Node) Join(knownNode *chord.Node) error {
+	// If knownNode is null, return error: to join this node to the ring, you must know a node already on it.
+	if knownNode == nil {
+		return errors.New("invalid argument: known node cannot be null")
+	}
+
+	// Ask the known remote node if this node already exists on the ring,
+	// finding the node that succeeds this node ID.
+	suc, err := node.RPC.FindSuccessor(knownNode, node.Id)
+	// In case of error, return the obtained error.
+	if err != nil {
+		return err
+	}
+	// If the ID of the obtained node is this node ID, then this node is already on the ring.
+	if isEqual(suc.Id, node.Id) {
+		return errors.New("cannot join this node to the ring: a node with this ID already exists")
+	}
+
+	// Lock the successor to write on it, and unlock it before.
+	node.sucLock.Lock()
+	node.successor = suc
+	node.sucLock.Unlock()
+
+	return nil
+}
+
+// Node server methods.
+
 // GetPredecessor returns the node believed to be the current predecessor.
 func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
 	// Lock the predecessor to read it, and unlock it before.
@@ -57,7 +89,7 @@ func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*c
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If predecessor is null, return a null Node.
+	// If predecessor is null, return a null node.
 	if pred == nil {
 		return nullNode, nil
 	}
@@ -73,7 +105,7 @@ func (node *Node) GetSuccessor(ctx context.Context, r *chord.EmptyRequest) (*cho
 	suc := node.successor
 	node.sucLock.RUnlock()
 
-	// If successor is null, return a null Node.
+	// If successor is null, return a null node.
 	if suc == nil {
 		return nullNode, nil
 	}
@@ -84,14 +116,17 @@ func (node *Node) GetSuccessor(ctx context.Context, r *chord.EmptyRequest) (*cho
 
 // FindSuccessor finds the node that succeeds ID.
 func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node, error) {
-	// TODO: Handle the cases in which the predecessor/successor is null.
-	// TODO: Im returning the current node in this cases, but this is sure incorrect.
+	// If the ID is null, return error.
+	if id == nil {
+		return nil, errors.New("invalid argument: id cannot be null")
+	}
+
 	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
 	node.fingerLock.RLock()                       // Lock the FingerTable to read from it.
 	pred := node.fingerTable.closestFinger(id.ID) // Find the successor of this ID in the FingerTable.
 	node.fingerLock.RUnlock()                     // After finishing read, unlock the FingerTable.
 
-	// If the correspondent finger is null, return this node.
+	// If the correspondent finger is null (this node is isolated), return this node.
 	if pred == nil {
 		return node.Node, nil
 	}
@@ -126,6 +161,11 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 
 // SetPredecessor sets the predecessor of a node.
 func (node *Node) SetPredecessor(ctx context.Context, pred *chord.Node) (*chord.EmptyRequest, error) {
+	// If the predecessor node is null, return error.
+	if pred == nil {
+		return nil, errors.New("invalid argument: predecessor node cannot be null")
+	}
+
 	// Lock the predecessor to write on it, and unlock it before.
 	node.predLock.Lock()
 	node.predecessor = pred
@@ -135,6 +175,11 @@ func (node *Node) SetPredecessor(ctx context.Context, pred *chord.Node) (*chord.
 
 // SetSuccessor sets predecessor for a node.
 func (node *Node) SetSuccessor(ctx context.Context, suc *chord.Node) (*chord.EmptyRequest, error) {
+	// If the successor node is null, return error.
+	if suc == nil {
+		return nil, errors.New("invalid argument: predecessor node cannot be null")
+	}
+
 	// Lock the successor to write on it, and unlock it before.
 	node.sucLock.Lock()
 	node.successor = suc

@@ -39,7 +39,7 @@ func newFingerTable(node *chord.Node, size int) *FingerTable {
 func fingerID(n []byte, i int, m int) []byte {
 
 	// Convert the ID to a bigint
-	idInt := (&big.Int{}).SetBytes(n)
+	id := (&big.Int{}).SetBytes(n)
 
 	// Calculates 2^i.
 	two := big.NewInt(2)
@@ -48,17 +48,17 @@ func fingerID(n []byte, i int, m int) []byte {
 
 	// Calculates the sum of n and 2^i.
 	sum := big.Int{}
-	sum.Add(idInt, &pow)
+	sum.Add(id, &pow)
 
-	// Get the ceiling.
-	ceil := big.Int{}
-	ceil.Exp(two, big.NewInt(int64(m)), nil)
+	// Calculates 2^m.
+	pow = big.Int{}
+	pow.Exp(two, big.NewInt(int64(m)), nil)
 
 	// Apply the mod.
-	idInt.Mod(&sum, &ceil)
+	id.Mod(&sum, &pow)
 
 	// Return the result.
-	return idInt.Bytes()
+	return id.Bytes()
 }
 
 // Checks if two IDs are equals.
@@ -66,22 +66,21 @@ func isEqual(ID1, ID2 []byte) bool {
 	return bytes.Compare(ID1, ID2) == 0
 }
 
-// Checks if an ID is between two others, on the chord ring.
+// Checks if an ID is in the (L, R] interval, on the chord ring.
 func inBetween(ID, L, R []byte) bool {
 	// Convert the IDs from bytes to big.Int.
 	IDi := (&big.Int{}).SetBytes(ID)
 	Li := (&big.Int{}).SetBytes(L)
 	Ri := (&big.Int{}).SetBytes(R)
 
-	// If L < R.
+	// If L < R, return true if L < ID <= R.
 	if Li.Cmp(Ri) < 0 {
-		// Return true if L < ID < R.
-		return Li.Cmp(IDi) < 0 && 0 < Ri.Cmp(IDi)
+		return Li.Cmp(IDi) < 0 && 0 <= Ri.Cmp(IDi)
 	}
 
 	// If L >= R, this is a segment over the end of the ring.
-	// So, ID is between L and R if L < ID or ID < R.
-	return Li.Cmp(IDi) < 0 || 0 < Ri.Cmp(IDi)
+	// So, ID is between L and R if L < ID or ID <= R.
+	return Li.Cmp(IDi) < 0 || 0 <= Ri.Cmp(IDi)
 }
 
 // Found the closest Finger preceding this ID.
@@ -92,8 +91,8 @@ func (table *FingerTable) closestFinger(ID []byte) *chord.Node {
 
 	for i := n - 1; i >= 0; i-- {
 		// Iterate the finger table in reverse, and return the first finger
-		// such that the ID is not between the finger ID and the initial node ID.
-		if !inBetween(ID, table.node.Id, table.Hand[i].ID) {
+		// such that the finger ID is between this node ID and the parameter ID.
+		if inBetween(table.Hand[i].ID, table.node.Id, ID) {
 			return table.Hand[i].Node
 		}
 	}
