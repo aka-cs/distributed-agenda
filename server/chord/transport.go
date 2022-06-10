@@ -171,6 +171,8 @@ func (services *GRPCServices) Stop() {
 	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 }
 
+// Node server remote methods.
+
 // GetPredecessor returns the node believed to be the current predecessor of a remote Node.
 func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, error) {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.

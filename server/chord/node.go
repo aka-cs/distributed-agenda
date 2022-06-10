@@ -68,7 +68,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 		return err
 	}
 	// If the ID of the obtained node is this node ID, then this node is already on the ring.
-	if isEqual(suc.Id, node.Id) {
+	if Equal(suc.Id, node.Id) {
 		return errors.New("cannot join this node to the ring: a node with this ID already exists")
 	}
 
@@ -78,6 +78,36 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	node.sucLock.Unlock()
 
 	return nil
+}
+
+// Stabilize this Node, updating its successor and notifying it.
+func (node *Node) Stabilize() {
+	// Lock the successor to read it, and unlock it before.
+	node.sucLock.RLock()
+	suc := node.successor
+	// If successor is null, there is no way to stabilize (and sure nothing to stabilize).
+	if suc == nil {
+		node.sucLock.RUnlock()
+		return
+	}
+	node.sucLock.RUnlock()
+
+	candidate, err := node.RPC.GetPredecessor(suc) // Obtain the predecessor of the successor.
+	// In case of error, return.
+	if err != nil || candidate == nil {
+		return
+	}
+
+	// If candidate is closer to this node than its current successor, update this node successor
+	// with the candidate.
+	if Between(candidate.Id, node.Id, suc.Id) {
+		// Lock the successor to write on it, and unlock it before.
+		node.sucLock.Lock()
+		node.successor = candidate
+		node.sucLock.Unlock()
+	}
+	// TODO: Implement Notify to uncomment the line below.
+	// node.RPC.Notify(suc, node.Node)
 }
 
 // Node server methods.
@@ -132,7 +162,7 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 	}
 
 	// If the corresponding finger its itself, the key is stored in its successor.
-	if isEqual(pred.Id, node.Id) {
+	if Equal(pred.Id, node.Id) {
 		// Lock the successor to read it, and unlock it before.
 		node.sucLock.RLock()
 		suc := node.successor
