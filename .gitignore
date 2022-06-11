@@ -19,3 +19,5 @@
 
 # Data
 server/resources
+/server/chord/chord/
+/server/chord/test.go
