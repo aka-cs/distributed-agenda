@@ -5,6 +5,11 @@ import "users.proto";
 package distributed_agenda;
 option go_package = "./server/proto";
 
+enum UserLevel{
+  USER = 0;
+  ADMIN = 1;
+}
+
 message Group{
   int64 id = 1;
 }
@@ -25,28 +30,21 @@ message DeleteGroupRequest{
   int64 id = 1;
 }
 
-message GetGroupAdminsRequest{
-  int64 id = 1;
-}
-
 message GetGroupUsersRequest{
-  int64 id = 1;
-}
-
-message AddAdminRequest{
-  int64 id = 1;
+  int64 groupID = 1;
+  UserLevel level = 2;
 }
 
 message AddUserRequest{
-  int64 id = 1;
-}
-
-message RemoveAdminRequest{
-  int64 id = 1;
+  int64 userID = 1;
+  int64 groupID = 2;
+  UserLevel level = 3;
 }
 
 message RemoveUserRequest{
-  int64 id = 1;
+  int64 userID = 1;
+  int64 groupID = 2;
+  UserLevel level = 3;
 }
 
 message GetGroupResponse{
@@ -65,23 +63,11 @@ message DeleteGroupResponse{
   OperationOutcome result = 1;
 }
 
-message GetGroupAdminsResponse{
-  OperationOutcome result = 1;
-}
-
 message GetGroupUsersResponse{
-  OperationOutcome result = 1;
-}
-
-message AddAdminResponse{
-  OperationOutcome result = 1;
+  User user = 1;
 }
 
 message AddUserResponse{
-  OperationOutcome result = 1;
-}
-
-message RemoveAdminResponse{
   OperationOutcome result = 1;
 }
 
@@ -99,15 +85,9 @@ service GroupService{
 
   rpc DeleteGroup(DeleteGroupRequest) returns (DeleteGroupResponse){}
 
-  rpc GetGroupAdmins(GetGroupAdminsRequest) returns (GetGroupAdminsResponse) {}
-
-  rpc GetGroupUsers(GetGroupUsersRequest) returns (GetGroupUsersResponse) {}
-
-  rpc AddAdmin(AddAdminRequest) returns (AddAdminResponse) {}
+  rpc GetGroupUsers(GetGroupUsersRequest) returns (stream GetGroupUsersResponse) {}
 
   rpc AddUser(AddUserRequest) returns (AddUserResponse) {}
-
-  rpc RemoveAdmin(RemoveAdminRequest) returns (RemoveAdminResponse) {}
 
   rpc RemoveUser(RemoveUserRequest) returns (RemoveUserResponse) {}
 }

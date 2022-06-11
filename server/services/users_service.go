@@ -22,7 +22,7 @@ func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserReques
 	err := persistency.Save(user, filepath.Join("User", strconv.FormatInt(user.Id, 10)))
 
 	if err != nil {
-		return nil, err
+		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, err
 	}
 
 	return &proto.CreateUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
@@ -55,7 +55,7 @@ func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (
 }
 
 func StartUserService() {
-	log.Infof("User Service Started")
+	log.Infof("User Service Started\n")
 
 	lis, err := net.Listen("tcp", "0.0.0.0:50051")
 

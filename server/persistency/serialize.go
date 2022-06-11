@@ -12,8 +12,6 @@ func Save[T any](object T, path string) error {
 	fullPath := filepath.Join("resources", path+".bin")
 	dir := filepath.Dir(fullPath)
 
-	log.Infof(dir + "\n")
-
 	err := os.MkdirAll(dir, os.ModePerm)
 
 	if err != nil {
@@ -62,6 +60,15 @@ func Load[T any](path string) (T, error) {
 	}
 
 	return result, nil
+}
+
+func Delete(path string) error {
+	err := os.Remove(filepath.Join("resources", path+".bin"))
+
+	if err != nil {
+		log.Errorf("Error deleting file:\n%v\n", err)
+	}
+	return err
 }
 
 func closeFile(file *os.File) {
