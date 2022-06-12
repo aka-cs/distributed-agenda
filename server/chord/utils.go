@@ -3,6 +3,7 @@ package chord
 import (
 	"DistributedTable/chord"
 	"bytes"
+	"hash"
 	"math/big"
 )
 
@@ -42,19 +43,22 @@ func Equal(ID1, ID2 []byte) bool {
 	return bytes.Compare(ID1, ID2) == 0
 }
 
-// Between checks if an ID is in the (L, R] interval, on the chord ring.
+// Between checks if an ID is in the (L, R) interval, on the chord ring.
 func Between(ID, L, R []byte) bool {
-	// Convert the IDs from bytes to big.Int.
-	id := (&big.Int{}).SetBytes(ID)
-	l := (&big.Int{}).SetBytes(L)
-	r := (&big.Int{}).SetBytes(R)
-
-	// If L < R, return true if L < ID <= R.
-	if l.Cmp(r) < 0 {
-		return l.Cmp(id) < 0 && 0 <= r.Cmp(id)
+	// If L < R, return true if L < ID < R.
+	if bytes.Compare(L, R) < 0 {
+		return bytes.Compare(L, ID) < 0 && 0 < bytes.Compare(R, ID)
 	}
 
 	// If L >= R, this is a segment over the end of the ring.
-	// So, ID is between L and R if L < ID or ID <= R.
-	return l.Cmp(id) < 0 || 0 <= r.Cmp(id)
+	// So, ID is between L and R if L < ID or ID < R.
+	return bytes.Compare(L, ID) < 0 || 0 < bytes.Compare(R, ID)
+}
+
+func HashKey(key string, hash func() hash.Hash) ([]byte, error) {
+	h := hash()
+	h.Write([]byte(key))
+	value := h.Sum(nil)
+
+	return value, nil
 }

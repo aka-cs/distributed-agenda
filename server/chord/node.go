@@ -29,8 +29,8 @@ type Node struct {
 func NewNode(addr string) (*Node, error) {
 	// TODO: Change the default Configuration by an Configuration optional argument.
 	// TODO: Obtain the ring size from the Configuration.
-	configuration := DefaultConfig()       // Obtain the configuration of the node.
-	id, err := configuration.hashKey(addr) // Obtain the ID relative to this address.
+	configuration := DefaultConfig()             // Obtain the configuration of the node.
+	id, err := HashKey(addr, configuration.Hash) // Obtain the ID relative to this address.
 
 	// If we get an error, return error.
 	if err != nil {

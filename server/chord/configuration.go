@@ -35,11 +35,3 @@ func DefaultConfig() *Configuration {
 
 	return config
 }
-
-func (config *Configuration) hashKey(key string) ([]byte, error) {
-	h := config.Hash()
-	h.Write([]byte(key))
-	value := h.Sum(nil)
-
-	return value, nil
-}
