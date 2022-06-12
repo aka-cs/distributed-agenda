@@ -17,6 +17,8 @@ service Chord {
   rpc SetSuccessor(Node) returns (EmptyRequest);
   // Notify this node that it possibly have a new predecessor.
   rpc Notify(Node) returns (EmptyRequest);
+  // Check if this Node is alive.
+  rpc Check(EmptyRequest) returns (EmptyRequest);
 }
 
 // Empty request for null parameters and returns.

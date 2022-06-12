@@ -5,8 +5,10 @@ import (
 	"errors"
 	"golang.org/x/net/context"
 	"sync"
+	"time"
 )
 
+// Node represent a Chord ring single node.
 type Node struct {
 	*chord.Node // Real Node.
 
@@ -52,6 +54,8 @@ func NewNode(addr string) (*Node, error) {
 	// Return the node.
 	return &node, nil
 }
+
+// Node internal methods.
 
 // Join a Node to the Chord ring, using another known Node.
 func (node *Node) Join(knownNode *chord.Node) error {
@@ -106,15 +110,60 @@ func (node *Node) Stabilize() {
 		node.successor = candidate
 		node.sucLock.Unlock()
 	}
-	// TODO: Implement Notify to uncomment the line below.
-	// node.RPC.Notify(suc, node.Node)
+	// Notify successor about the existence of its new predecessor.
+	err = node.RPC.Notify(suc, node.Node)
+	if err != nil {
+		return
+	}
+}
+
+// PeriodicallyStabilize periodically stabilize the node.
+func (node *Node) PeriodicallyStabilize() {
+	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
+	for {
+		select {
+		case <-ticker.C:
+			node.Stabilize() // If it's time, stabilize the node.
+		}
+	}
+}
+
+// CheckPredecessor checks whether predecessor has failed.
+func (node *Node) CheckPredecessor() {
+	// Lock the predecessor to read it, and unlock it after.
+	node.predLock.RLock()
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
+	// If predecessor is not null, check if it's alive.
+	if pred != nil {
+		err := node.RPC.Check(pred)
+		// In case of error, assume predecessor is not alive, and set this node predecessor to null.
+		if err != nil {
+			// Lock the predecessor to write on it, and unlock it after.
+			node.predLock.Lock()
+			node.predecessor = nil
+			node.predLock.Unlock()
+		}
+	}
+}
+
+// PeriodicallyCheckPredecessor periodically checks whether predecessor has failed.
+func (node *Node) PeriodicallyCheckPredecessor() {
+	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	for {
+		select {
+		case <-ticker.C:
+			node.CheckPredecessor() // If it's time, check if this node predecessor it's alive.
+		}
+	}
 }
 
 // FindIDSuccessor finds the node that succeeds ID.
 func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
 	node.fingerLock.RLock()        // Lock the FingerTable to read from it.
-	pred := node.closestFinger(id) // Find the successor of this ID in the FingerTable.
+	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
 	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
 
 	// If the correspondent finger is null (this node is isolated), return this node.
@@ -235,5 +284,10 @@ func (node *Node) Notify(ctx context.Context, pred *chord.Node) (*chord.EmptyReq
 		node.predecessor = pred
 	}
 
+	return emptyRequest, nil
+}
+
+// Check if this node is alive.
+func (node *Node) Check(ctx context.Context) (*chord.EmptyRequest, error) {
 	return emptyRequest, nil
 }

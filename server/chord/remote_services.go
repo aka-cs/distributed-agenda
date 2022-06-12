@@ -12,12 +12,8 @@ import (
 
 // RemoteServices enables a node to interact with other nodes in the ring, as a client of its servers.
 type RemoteServices interface {
-	// Start the services.
-	Start()
-	// Stop the services.
-	Stop()
-
-	// Chord methods.
+	Start() // Start the services.
+	Stop()  // Stop the services.
 
 	// GetPredecessor returns the node believed to be the current predecessor of a remote Node.
 	GetPredecessor(*chord.Node) (*chord.Node, error)
@@ -31,33 +27,8 @@ type RemoteServices interface {
 	SetSuccessor(*chord.Node, *chord.Node) error
 	// Notify a remote Node that it possibly have a new predecessor.
 	Notify(*chord.Node, *chord.Node) error
-
-	// TODO: Implement the methods above.
-
-	// CheckPredecessor(*chord.Node) error
-}
-
-// Necessary definitions.
-var (
-	nullNode     = &chord.Node{}
-	emptyRequest = &chord.EmptyRequest{}
-)
-
-// RemoteNode struct stores the properties of a connection with a remote chord Node.
-type RemoteNode struct {
-	chord.ChordClient // Chord client connected with the remote Node server.
-
-	addr       string           // Address of the remote Node.
-	conn       *grpc.ClientConn // Grpc connection with the remote Node server.
-	lastActive time.Time        // Last time the connection was used.
-}
-
-// Close the connection in RemoteNode.
-func (connection *RemoteNode) Close() {
-	err := connection.conn.Close()
-	if err != nil {
-		return
-	}
+	// Check if a remote Node is alive.
+	Check(*chord.Node) error
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -82,6 +53,8 @@ func NewGRPCServices(config *Configuration) *GRPCServices {
 	// Return the GRPCServices object.
 	return services
 }
+
+// GRPCServices internal methods.
 
 // Connect with a remote address.
 func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
@@ -127,24 +100,29 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 
 // CloseOldConnections close the old open connections.
 func (services *GRPCServices) CloseOldConnections() {
+	// If the service is shutdown, return.
+	if atomic.LoadInt32(&services.running) == 0 {
+		return
+	}
+	services.connectionsMtx.Lock() // Lock the dictionary to write on it.
+	// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
+	for addr, remoteNode := range services.connections {
+		if time.Since(remoteNode.lastActive) > services.MaxIdle {
+			remoteNode.CloseConnection()
+			delete(services.connections, addr) // Delete the <address, connection> pair of the dictionary.
+		}
+	}
+	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
+}
+
+// PeriodicallyCloseConnections periodically close the old open connections.
+func (services *GRPCServices) PeriodicallyCloseConnections() {
 	ticker := time.NewTicker(60 * time.Second) // Set the time between routine activations.
 
 	for {
 		select {
 		case <-ticker.C:
-			// If the service is shutdown, return.
-			if atomic.LoadInt32(&services.running) == 0 {
-				return
-			}
-			services.connectionsMtx.Lock() // Lock the dictionary to write on it.
-			// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
-			for addr, connection := range services.connections {
-				if time.Since(connection.lastActive) > services.MaxIdle {
-					connection.Close()
-					delete(services.connections, addr) // Delete the <address, connection> pair of the dictionary.
-				}
-			}
-			services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
+			services.CloseOldConnections() // If it's time, close old connections.
 		}
 	}
 }
@@ -163,16 +141,16 @@ func (services *GRPCServices) Stop() {
 	// Close all the connections
 	services.connectionsMtx.Lock() // Lock the dictionary to write on it.
 	// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
-	for _, connection := range services.connections {
-		if time.Since(connection.lastActive) > services.MaxIdle {
-			connection.Close()
+	for _, remoteNode := range services.connections {
+		if time.Since(remoteNode.lastActive) > services.MaxIdle {
+			remoteNode.CloseConnection()
 		}
 	}
 	services.connections = nil       // Delete dictionary of connections.
 	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 }
 
-// Node server remote methods.
+// GRPCServices remote methods.
 
 // GetPredecessor returns the node believed to be the current predecessor of a remote Node.
 func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, error) {
@@ -272,4 +250,21 @@ func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 	_, err = remoteNode.Notify(ctx, pred)
 	return err
 
+}
+
+// Check if a remote Node is alive.
+func (services *GRPCServices) Check(node *chord.Node) error {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	// In case of error, return the error.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.Check(ctx, emptyRequest)
+	return err
 }
