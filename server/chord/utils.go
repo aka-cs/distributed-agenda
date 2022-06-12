@@ -44,7 +44,13 @@ func Equal(ID1, ID2 []byte) bool {
 }
 
 // Between checks if an ID is in the (L, R) interval, on the chord ring.
-func Between(ID, L, R []byte) bool {
+func Between(ID, L, R []byte, includeL, includeR bool) bool {
+	// If it is required to consider any of the limits of the interval in the check,
+	// check the equality of the ID with such limit.
+	if (includeL && bytes.Equal(L, ID)) || (includeR && bytes.Equal(R, ID)) {
+		return true
+	}
+
 	// If L < R, return true if L < ID < R.
 	if bytes.Compare(L, R) < 0 {
 		return bytes.Compare(L, ID) < 0 && 0 < bytes.Compare(R, ID)

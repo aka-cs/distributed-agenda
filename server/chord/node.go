@@ -104,7 +104,7 @@ func (node *Node) Stabilize() {
 
 	// If candidate is closer to this node than its current successor, update this node successor
 	// with the candidate.
-	if Between(candidate.Id, node.Id, suc.Id) {
+	if Between(candidate.Id, node.Id, suc.Id, false, false) {
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
 		node.successor = candidate
@@ -280,7 +280,7 @@ func (node *Node) Notify(ctx context.Context, pred *chord.Node) (*chord.EmptyReq
 
 	// If the predecessor candidate is closer to this node than its current predecessor, update this node
 	// predecessor with the candidate.
-	if node.predecessor == nil || Between(pred.Id, node.predecessor.Id, node.Id) {
+	if node.predecessor == nil || Between(pred.Id, node.predecessor.Id, node.Id, false, false) {
 		node.predecessor = pred
 	}
 

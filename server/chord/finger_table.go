@@ -35,7 +35,7 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 	// Iterate the finger table in reverse, and return the first finger
 	// such that the finger ID is between this node ID and the parameter ID.
 	for i := len(node.fingerTable) - 1; i >= 0; i-- {
-		if Between(node.fingerTable[i].ID, node.Id, ID) {
+		if Between(node.fingerTable[i].ID, node.Id, ID, false, true) {
 			return node.fingerTable[i].Node
 		}
 	}
