@@ -189,7 +189,7 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 	return suc, nil
 }
 
-// SetPredecessor sets the predecessor of a node.
+// SetPredecessor sets the predecessor of this node.
 func (node *Node) SetPredecessor(ctx context.Context, pred *chord.Node) (*chord.EmptyRequest, error) {
 	// If the predecessor node is null, return error.
 	if pred == nil {
@@ -203,7 +203,7 @@ func (node *Node) SetPredecessor(ctx context.Context, pred *chord.Node) (*chord.
 	return emptyRequest, nil
 }
 
-// SetSuccessor sets predecessor for a node.
+// SetSuccessor sets predecessor for this node.
 func (node *Node) SetSuccessor(ctx context.Context, suc *chord.Node) (*chord.EmptyRequest, error) {
 	// If the successor node is null, return error.
 	if suc == nil {
@@ -214,5 +214,20 @@ func (node *Node) SetSuccessor(ctx context.Context, suc *chord.Node) (*chord.Emp
 	node.sucLock.Lock()
 	node.successor = suc
 	node.sucLock.Unlock()
+	return emptyRequest, nil
+}
+
+// Notify this node that it possibly have a new predecessor.
+func (node *Node) Notify(ctx context.Context, pred *chord.Node) (*chord.EmptyRequest, error) {
+	// Lock the successor to read and write on it, and unlock it at the end of function.
+	node.predLock.Lock()
+	defer node.predLock.Unlock()
+
+	// If the predecessor candidate is closer to this node than its current predecessor, update this node
+	// predecessor with the candidate.
+	if node.predecessor == nil || Between(pred.Id, node.predecessor.Id, node.Id) {
+		node.predecessor = pred
+	}
+
 	return emptyRequest, nil
 }

@@ -29,10 +29,11 @@ type RemoteServices interface {
 	SetPredecessor(*chord.Node, *chord.Node) error
 	// SetSuccessor sets the successor of a remote Node.
 	SetSuccessor(*chord.Node, *chord.Node) error
+	// Notify a remote Node that it possibly have a new predecessor.
+	Notify(*chord.Node, *chord.Node) error
 
 	// TODO: Implement the methods above.
 
-	// Notify(*chord.Node, *chord.Node) error
 	// CheckPredecessor(*chord.Node) error
 }
 
@@ -222,7 +223,7 @@ func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord
 }
 
 // SetPredecessor sets the predecessor of a remote Node.
-func (services *GRPCServices) SetPredecessor(node *chord.Node, pred *chord.Node) error {
+func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	// In case of error, return the error.
 	if err != nil {
@@ -239,7 +240,7 @@ func (services *GRPCServices) SetPredecessor(node *chord.Node, pred *chord.Node)
 }
 
 // SetSuccessor sets the successor of a remote Node.
-func (services *GRPCServices) SetSuccessor(node *chord.Node, suc *chord.Node) error {
+func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	// In case of error, return the error.
 	if err != nil {
@@ -253,4 +254,22 @@ func (services *GRPCServices) SetSuccessor(node *chord.Node, suc *chord.Node) er
 	// Return the result of the remote call.
 	_, err = remoteNode.SetSuccessor(ctx, suc)
 	return err
+}
+
+// Notify a remote Node that it possibly have a new predecessor.
+func (services *GRPCServices) Notify(node, pred *chord.Node) error {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	// In case of error, return the error.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.Notify(ctx, pred)
+	return err
+
 }
