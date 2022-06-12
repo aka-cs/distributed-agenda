@@ -90,7 +90,7 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 		return nil, errors.New("must start grpc service first")
 	}
 
-	services.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it before.
+	services.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it after.
 	// Checks if the dictionary is instantiated. If condition not holds return the error.
 	if services.connections == nil {
 		services.connectionsMtx.Unlock()
@@ -117,7 +117,7 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 		conn,
 		time.Now()} // Wrap the ChordClient on a RemoteNode struct.
 
-	services.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it before.
+	services.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it after.
 	services.connections[addr] = remoteNode
 	services.connectionsMtx.Unlock()
 

@@ -72,7 +72,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 		return errors.New("cannot join this node to the ring: a node with this ID already exists")
 	}
 
-	// Lock the successor to write on it, and unlock it before.
+	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
 	node.successor = suc
 	node.sucLock.Unlock()
@@ -82,7 +82,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 
 // Stabilize this Node, updating its successor and notifying it.
 func (node *Node) Stabilize() {
-	// Lock the successor to read it, and unlock it before.
+	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successor
 	// If successor is null, there is no way to stabilize (and sure nothing to stabilize).
@@ -101,7 +101,7 @@ func (node *Node) Stabilize() {
 	// If candidate is closer to this node than its current successor, update this node successor
 	// with the candidate.
 	if Between(candidate.Id, node.Id, suc.Id) {
-		// Lock the successor to write on it, and unlock it before.
+		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
 		node.successor = candidate
 		node.sucLock.Unlock()
@@ -110,11 +110,51 @@ func (node *Node) Stabilize() {
 	// node.RPC.Notify(suc, node.Node)
 }
 
+// FindIDSuccessor finds the node that succeeds ID.
+func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
+	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
+	node.fingerLock.RLock()        // Lock the FingerTable to read from it.
+	pred := node.closestFinger(id) // Find the successor of this ID in the FingerTable.
+	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
+
+	// If the correspondent finger is null (this node is isolated), return this node.
+	if pred == nil {
+		return node.Node, nil
+	}
+
+	// If the corresponding finger its itself, the key is stored in its successor.
+	if Equal(pred.Id, node.Id) {
+		// Lock the successor to read it, and unlock it after.
+		node.sucLock.RLock()
+		suc := node.successor
+		node.sucLock.RUnlock()
+
+		// If the successor is null, return this node.
+		if suc == nil {
+			return node.Node, nil
+		}
+
+		return suc, nil
+	}
+
+	suc, err := node.RPC.FindSuccessor(pred, id) // Find the successor of the remote node obtained.
+	// In case of error, return the obtained error.
+	if err != nil {
+		return nil, err
+	}
+	// If the successor is null, return this node.
+	if suc == nil {
+		return node.Node, nil
+	}
+
+	return suc, nil
+}
+
 // Node server methods.
 
 // GetPredecessor returns the node believed to be the current predecessor.
 func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
-	// Lock the predecessor to read it, and unlock it before.
+	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
 	node.predLock.RUnlock()
@@ -130,7 +170,7 @@ func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*c
 
 // GetSuccessor returns the node believed to be the current successor.
 func (node *Node) GetSuccessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
-	// Lock the successor to read it, and unlock it before.
+	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successor
 	node.sucLock.RUnlock()
@@ -151,42 +191,8 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 		return nil, errors.New("invalid argument: id cannot be null")
 	}
 
-	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
-	node.fingerLock.RLock()           // Lock the FingerTable to read from it.
-	pred := node.closestFinger(id.ID) // Find the successor of this ID in the FingerTable.
-	node.fingerLock.RUnlock()         // After finishing read, unlock the FingerTable.
-
-	// If the correspondent finger is null (this node is isolated), return this node.
-	if pred == nil {
-		return node.Node, nil
-	}
-
-	// If the corresponding finger its itself, the key is stored in its successor.
-	if Equal(pred.Id, node.Id) {
-		// Lock the successor to read it, and unlock it before.
-		node.sucLock.RLock()
-		suc := node.successor
-		node.sucLock.RUnlock()
-
-		// If the successor is null, return this node.
-		if suc == nil {
-			return node.Node, nil
-		}
-
-		return suc, nil
-	}
-
-	suc, err := node.RPC.FindSuccessor(pred, id.ID) // Find the successor of the remote node obtained.
-	// In case of error, return the obtained error.
-	if err != nil {
-		return nil, err
-	}
-	// If the successor is null, return this node.
-	if suc == nil {
-		return node.Node, nil
-	}
-
-	return suc, nil
+	// Otherwise, find the successor of this ID.
+	return node.FindIDSuccessor(id.ID)
 }
 
 // SetPredecessor sets the predecessor of this node.
@@ -196,7 +202,7 @@ func (node *Node) SetPredecessor(ctx context.Context, pred *chord.Node) (*chord.
 		return nil, errors.New("invalid argument: predecessor node cannot be null")
 	}
 
-	// Lock the predecessor to write on it, and unlock it before.
+	// Lock the predecessor to write on it, and unlock it after.
 	node.predLock.Lock()
 	node.predecessor = pred
 	node.predLock.Unlock()
@@ -210,7 +216,7 @@ func (node *Node) SetSuccessor(ctx context.Context, suc *chord.Node) (*chord.Emp
 		return nil, errors.New("invalid argument: predecessor node cannot be null")
 	}
 
-	// Lock the successor to write on it, and unlock it before.
+	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
 	node.successor = suc
 	node.sucLock.Unlock()
