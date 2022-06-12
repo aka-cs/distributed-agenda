@@ -13,14 +13,10 @@ type Finger struct {
 }
 
 // FingerTable Table structure
-type FingerTable struct {
-	node *chord.Node
-	Hand []Finger
-	size int
-}
+type FingerTable []Finger
 
 // FingerTable constructor.
-func newFingerTable(node *chord.Node, size int) *FingerTable {
+func newFingerTable(node *chord.Node, size int) FingerTable {
 	// TODO: Look how to add Node information to the fingers.
 
 	// Build the new array of fingers.
@@ -32,7 +28,7 @@ func newFingerTable(node *chord.Node, size int) *FingerTable {
 	}
 
 	// Return the FingerTable.
-	return &FingerTable{node, hand, size}
+	return hand
 }
 
 // FingerID computes the offset by (n + 2^i) mod (2^m)
@@ -84,17 +80,17 @@ func Between(ID, L, R []byte) bool {
 }
 
 // Found the closest Finger preceding this ID.
-func (table *FingerTable) closestFinger(ID []byte) *chord.Node {
+func (node *Node) closestFinger(ID []byte) *chord.Node {
 	// Iterate the finger table in reverse, and return the first finger
 	// such that the finger ID is between this node ID and the parameter ID.
-	for i := len(table.Hand) - 1; i >= 0; i-- {
-		if Between(table.Hand[i].ID, table.node.Id, ID) {
-			return table.Hand[i].Node
+	for i := len(node.fingerTable) - 1; i >= 0; i-- {
+		if Between(node.fingerTable[i].ID, node.Id, ID) {
+			return node.fingerTable[i].Node
 		}
 	}
 
 	// If no finger meets the conditions, return this node.
-	return table.node
+	return node.Node
 }
 
 // TODO: Fix Fingers
