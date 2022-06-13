@@ -30,10 +30,10 @@ type RemoteServices interface {
 	// Check if a remote Node is alive.
 	Check(*chord.Node) error
 
-	// Get the value associated to a key from a remote Node.
+	// Get the value associated to a key on a remote Node storage.
 	Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error)
-	// DirectlyGet get the value associated to a key on a remote Node storage. If the key isn't there, return error.
-	DirectlyGet(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error)
+	// Set set a <key, value> pair on a remote Node storage.
+	Set(node *chord.Node, req *chord.SetRequest) error
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -248,7 +248,6 @@ func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 	// Return the result of the remote call.
 	_, err = remoteNode.Notify(ctx, pred)
 	return err
-
 }
 
 // Check if a remote Node is alive.
@@ -267,8 +266,8 @@ func (services *GRPCServices) Check(node *chord.Node) error {
 	return err
 }
 
-// DirectlyGet get the value associated to a key on a remote Node storage. If the key isn't there, return error.
-func (services *GRPCServices) DirectlyGet(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
+// Get the value associated to a key on a remote Node storage.
+func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
@@ -282,11 +281,11 @@ func (services *GRPCServices) DirectlyGet(node *chord.Node, req *chord.GetReques
 	return remoteNode.DirectlyGet(ctx, req)
 }
 
-// Get the value associated to a key from a remote Node.
-func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
+// Set set a <key, value> pair on a remote Node storage.
+func (services *GRPCServices) Set(node *chord.Node, req *chord.SetRequest) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Obtain the context of the connection and set the timeout of the request.
@@ -294,5 +293,6 @@ func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*cho
 	defer cancel()
 
 	// Return the result of the remote call.
-	return remoteNode.Get(ctx, req)
+	_, err = remoteNode.DirectlySet(ctx, req)
+	return err
 }

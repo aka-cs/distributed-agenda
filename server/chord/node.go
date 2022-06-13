@@ -22,8 +22,8 @@ type Node struct {
 	fingerTable FingerTable  // FingerTable of this Node.
 	fingerLock  sync.RWMutex // Locks the FingerTable for reading or writing.
 
-	dictionary     Storage      // Storage of <key, value> pairs of this Node.
-	dictionaryLock sync.RWMutex // Locks the dictionary for reading or writing.
+	dictionary Storage      // Storage of <key, value> pairs of this Node.
+	dictLock   sync.RWMutex // Locks the dictionary for reading or writing.
 
 	config *Configuration // General configurations.
 }
@@ -302,9 +302,11 @@ func (node *Node) Check(ctx context.Context) (*chord.EmptyRequest, error) {
 	return emptyRequest, nil
 }
 
-// DirectlyGet get the value associated to a key on this Node storage. If the key isn't there, return error.
+// DirectlyGet get the value associated to a key on this Node storage.
 func (node *Node) DirectlyGet(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
+	node.dictLock.RLock()                      // Lock the dictionary to read it, and unlock it after.
 	value, err := node.dictionary.Get(req.Key) // Get the key value from the storage.
+	node.dictLock.RUnlock()
 	if err != nil {
 		return nil, err
 	}
@@ -324,5 +326,33 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 		return node.DirectlyGet(ctx, req)
 	}
 	// Otherwise, return the result of the remote call on the correspondent node.
-	return node.RPC.DirectlyGet(keyNode, req)
+	return node.RPC.Get(keyNode, req)
+}
+
+// DirectlySet set a <key, value> pair on this Node storage.
+func (node *Node) DirectlySet(ctx context.Context, req *chord.SetRequest) (*chord.EmptyRequest, error) {
+	node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
+	defer node.dictLock.Unlock()
+
+	err := node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on the storage.
+	if err != nil {
+		return nil, err
+	}
+
+	return emptyRequest, nil
+}
+
+// Set a <key, value> pair on storage.
+func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyRequest, error) {
+	keyNode, err := node.LocateKey(req.Key) // Locate the node that stores the key.
+	if err != nil {
+		return nil, err
+	}
+
+	// If the node that stores the key is this node, directly set the <key, value> pair on this node storage.
+	if Equals(keyNode.Id, node.Id) {
+		return node.DirectlySet(ctx, req)
+	}
+	// Otherwise, return the result of the remote call on the correspondent node.
+	return emptyRequest, node.RPC.Set(keyNode, req)
 }

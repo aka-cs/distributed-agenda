@@ -20,10 +20,14 @@ service Chord {
   // Check if this Node is alive.
   rpc Check(EmptyRequest) returns (EmptyRequest);
 
-  // DirectlyGet get the value associated to a key on this Node storage. If the key isn't there, return error.
+  // DirectlyGet get the value associated to a key on this node storage.
   rpc DirectlyGet(GetRequest) returns (GetResponse);
   // Get the value associated to a key.
   rpc Get(GetRequest) returns (GetResponse);
+  // DirectlySet set a <key, value> pair on this node storage.
+  rpc DirectlySet(SetRequest) returns (EmptyRequest);
+  // Set a <key, value> pair on storage.
+  rpc Set(SetRequest) returns (EmptyRequest);
 }
 
 // Empty request for null parameters and returns.
@@ -48,4 +52,10 @@ message GetRequest {
 // GetResponse contains the value of a requested key.
 message GetResponse {
   bytes value = 1;
+}
+
+// SetRequest contains the <key, value> pair to set on storage.
+message SetRequest {
+  string key = 1;
+  string value = 2;
 }
