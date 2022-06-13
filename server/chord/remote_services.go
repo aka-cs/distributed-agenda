@@ -29,6 +29,11 @@ type RemoteServices interface {
 	Notify(*chord.Node, *chord.Node) error
 	// Check if a remote Node is alive.
 	Check(*chord.Node) error
+
+	// Get the value associated to a key from a remote Node.
+	Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error)
+	// DirectlyGet get the value associated to a key on a remote Node storage. If the key isn't there, return error.
+	DirectlyGet(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error)
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -155,7 +160,6 @@ func (services *GRPCServices) Stop() {
 // GetPredecessor returns the node believed to be the current predecessor of a remote Node.
 func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, error) {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +175,6 @@ func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, err
 // GetSuccessor returns the node believed to be the current successor of a remote Node.
 func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error) {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +190,6 @@ func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error
 // FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
 func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,6 @@ func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord
 // SetPredecessor sets the predecessor of a remote Node.
 func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return err
 	}
@@ -220,7 +221,6 @@ func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
 // SetSuccessor sets the successor of a remote Node.
 func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,6 @@ func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
 // Notify a remote Node that it possibly have a new predecessor.
 func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return err
 	}
@@ -255,7 +254,6 @@ func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 // Check if a remote Node is alive.
 func (services *GRPCServices) Check(node *chord.Node) error {
 	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	// In case of error, return the error.
 	if err != nil {
 		return err
 	}
@@ -267,4 +265,34 @@ func (services *GRPCServices) Check(node *chord.Node) error {
 	// Return the result of the remote call.
 	_, err = remoteNode.Check(ctx, emptyRequest)
 	return err
+}
+
+// DirectlyGet get the value associated to a key on a remote Node storage. If the key isn't there, return error.
+func (services *GRPCServices) DirectlyGet(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	if err != nil {
+		return nil, err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	return remoteNode.DirectlyGet(ctx, req)
+}
+
+// Get the value associated to a key from a remote Node.
+func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
+	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	if err != nil {
+		return nil, err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	return remoteNode.Get(ctx, req)
 }

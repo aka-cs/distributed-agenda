@@ -22,6 +22,9 @@ type Node struct {
 	fingerTable FingerTable  // FingerTable of this Node.
 	fingerLock  sync.RWMutex // Locks the FingerTable for reading or writing.
 
+	dictionary     Storage      // Storage of <key, value> pairs of this Node.
+	dictionaryLock sync.RWMutex // Locks the dictionary for reading or writing.
+
 	config *Configuration // General configurations.
 }
 
@@ -31,8 +34,6 @@ func NewNode(addr string) (*Node, error) {
 	// TODO: Obtain the ring size from the Configuration.
 	configuration := DefaultConfig()             // Obtain the configuration of the node.
 	id, err := HashKey(addr, configuration.Hash) // Obtain the ID relative to this address.
-
-	// If we get an error, return error.
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +50,7 @@ func NewNode(addr string) (*Node, error) {
 		successor:   &innerNode,
 		RPC:         transport,
 		config:      configuration,
-		fingerTable: newFingerTable(&innerNode, 160)}
+		fingerTable: NewFingerTable(&innerNode, 160)}
 
 	// Return the node.
 	return &node, nil
@@ -67,12 +68,11 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	// Ask the known remote node if this node already exists on the ring,
 	// finding the node that succeeds this node ID.
 	suc, err := node.RPC.FindSuccessor(knownNode, node.Id)
-	// In case of error, return the obtained error.
 	if err != nil {
 		return err
 	}
 	// If the ID of the obtained node is this node ID, then this node is already on the ring.
-	if Equal(suc.Id, node.Id) {
+	if Equals(suc.Id, node.Id) {
 		return errors.New("cannot join this node to the ring: a node with this ID already exists")
 	}
 
@@ -97,7 +97,7 @@ func (node *Node) Stabilize() {
 	node.sucLock.RUnlock()
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Obtain the predecessor of the successor.
-	// In case of error, return.
+	// In case of error of any type, return.
 	if err != nil || candidate == nil {
 		return
 	}
@@ -172,7 +172,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	}
 
 	// If the corresponding finger its itself, the key is stored in its successor.
-	if Equal(pred.Id, node.Id) {
+	if Equals(pred.Id, node.Id) {
 		// Lock the successor to read it, and unlock it after.
 		node.sucLock.RLock()
 		suc := node.successor
@@ -187,7 +187,6 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	}
 
 	suc, err := node.RPC.FindSuccessor(pred, id) // Find the successor of the remote node obtained.
-	// In case of error, return the obtained error.
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +196,17 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	}
 
 	return suc, nil
+}
+
+// LocateKey locate the Node that stores key.
+func (node *Node) LocateKey(key string) (*chord.Node, error) {
+	id, err := HashKey(key, node.config.Hash) // Obtain the key ID.
+	if err != nil {
+		return nil, err
+	}
+
+	// Find and return the successor of this ID.
+	return node.FindIDSuccessor(id)
 }
 
 // Node server methods.
@@ -290,4 +300,29 @@ func (node *Node) Notify(ctx context.Context, pred *chord.Node) (*chord.EmptyReq
 // Check if this node is alive.
 func (node *Node) Check(ctx context.Context) (*chord.EmptyRequest, error) {
 	return emptyRequest, nil
+}
+
+// DirectlyGet get the value associated to a key on this Node storage. If the key isn't there, return error.
+func (node *Node) DirectlyGet(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
+	value, err := node.dictionary.Get(req.Key) // Get the key value from the storage.
+	if err != nil {
+		return nil, err
+	}
+	// Return the key value.
+	return &chord.GetResponse{Value: value}, nil
+}
+
+// Get the value associated to a key.
+func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
+	keyNode, err := node.LocateKey(req.Key) // Locate the node that stores the key.
+	if err != nil {
+		return nil, err
+	}
+
+	// If the node that stores the key is this node, directly get the associated value from this node storage.
+	if Equals(keyNode.Id, node.Id) {
+		return node.DirectlyGet(ctx, req)
+	}
+	// Otherwise, return the result of the remote call on the correspondent node.
+	return node.RPC.DirectlyGet(keyNode, req)
 }

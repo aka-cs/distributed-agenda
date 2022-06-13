@@ -19,6 +19,11 @@ service Chord {
   rpc Notify(Node) returns (EmptyRequest);
   // Check if this Node is alive.
   rpc Check(EmptyRequest) returns (EmptyRequest);
+
+  // DirectlyGet get the value associated to a key on this Node storage. If the key isn't there, return error.
+  rpc DirectlyGet(GetRequest) returns (GetResponse);
+  // Get the value associated to a key.
+  rpc Get(GetRequest) returns (GetResponse);
 }
 
 // Empty request for null parameters and returns.
@@ -29,8 +34,18 @@ message ID{
   bytes ID = 1;
 }
 
-// Node contains a node ID and an address.
+// Node contains an ID and an address.
 message Node {
   bytes id = 1;
   string addr = 2;
+}
+
+// GetRequest contains the key of a desired value.
+message GetRequest {
+  string key = 1;
+}
+
+// GetResponse contains the value of a requested key.
+message GetResponse {
+  bytes value = 1;
 }

@@ -38,8 +38,8 @@ func FingerID(n []byte, i int, m int) []byte {
 	return id.Bytes()
 }
 
-// Equal checks if two IDs are equals.
-func Equal(ID1, ID2 []byte) bool {
+// Equals checks if two IDs are equals.
+func Equals(ID1, ID2 []byte) bool {
 	return bytes.Compare(ID1, ID2) == 0
 }
 
@@ -63,7 +63,9 @@ func Between(ID, L, R []byte, includeL, includeR bool) bool {
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {
 	h := hash()
-	h.Write([]byte(key))
+	if _, err := h.Write([]byte(key)); err != nil {
+		return nil, err
+	}
 	value := h.Sum(nil)
 
 	return value, nil

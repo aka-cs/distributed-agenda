@@ -14,8 +14,8 @@ type Finger struct {
 // FingerTable definition.
 type FingerTable []Finger
 
-// FingerTable constructor.
-func newFingerTable(node *chord.Node, size int) FingerTable {
+// NewFingerTable creates and return a new FingerTable.
+func NewFingerTable(node *chord.Node, size int) FingerTable {
 	// TODO: Look how to add Node information to the fingers.
 	hand := make([]Finger, size) // Build the new array of fingers.
 
