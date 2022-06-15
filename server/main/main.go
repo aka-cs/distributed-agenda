@@ -14,5 +14,6 @@ func main() {
 	})
 
 	go services.StartGroupService()
+	go services.StartEventService()
 	services.StartUserService()
 }
