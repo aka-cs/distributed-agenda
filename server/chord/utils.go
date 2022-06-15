@@ -9,8 +9,9 @@ import (
 
 // Necessary definitions.
 var (
-	nullNode     = &chord.Node{}
-	emptyRequest = &chord.EmptyRequest{}
+	nullNode      = &chord.Node{}
+	emptyRequest  = &chord.EmptyRequest{}
+	emptyResponse = &chord.EmptyResponse{}
 )
 
 // FingerID computes the offset by (n + 2^i) mod (2^m)
@@ -59,6 +60,17 @@ func Between(ID, L, R []byte, includeL, includeR bool) bool {
 	// If L >= R, this is a segment over the end of the ring.
 	// So, ID is between L and R if L < ID or ID < R.
 	return bytes.Compare(L, ID) < 0 || 0 < bytes.Compare(R, ID)
+}
+
+// KeyBetween checks if a key hash ID is in the (L, R) interval, on the chord ring.
+func KeyBetween(key string, hash func() hash.Hash, L, R []byte, includeL, includeR bool) (bool, error) {
+	ID, err := HashKey(key, hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		return false, err
+	}
+
+	// Return true if the ID is in the interval.
+	return Between(ID, L, R, includeL, includeR), nil
 }
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {

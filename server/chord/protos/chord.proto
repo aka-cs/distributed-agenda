@@ -9,29 +9,36 @@ service Chord {
   rpc GetPredecessor(EmptyRequest) returns (Node);
   // GetSuccessor returns the node believed to be the current successor.
   rpc GetSuccessor(EmptyRequest) returns (Node);
+  // SetPredecessor sets the predecessor of this node.
+  rpc SetPredecessor(Node) returns (EmptyResponse);
+  // SetSuccessor sets the successor of this node.
+  rpc SetSuccessor(Node) returns (EmptyResponse);
   // FindSuccessor finds the node that succeeds ID.
   rpc FindSuccessor(ID) returns (Node);
-  // SetPredecessor sets the predecessor of this node.
-  rpc SetPredecessor(Node) returns (EmptyRequest);
-  // SetSuccessor sets the successor of this node.
-  rpc SetSuccessor(Node) returns (EmptyRequest);
   // Notify this node that it possibly have a new predecessor.
-  rpc Notify(Node) returns (EmptyRequest);
+  rpc Notify(Node) returns (EmptyResponse);
   // Check if this Node is alive.
-  rpc Check(EmptyRequest) returns (EmptyRequest);
+  rpc Check(EmptyRequest) returns (EmptyResponse);
 
-  // DirectlyGet get the value associated to a key on this node storage.
-  rpc DirectlyGet(GetRequest) returns (GetResponse);
   // Get the value associated to a key.
   rpc Get(GetRequest) returns (GetResponse);
-  // DirectlySet set a <key, value> pair on this node storage.
-  rpc DirectlySet(SetRequest) returns (EmptyRequest);
   // Set a <key, value> pair on storage.
-  rpc Set(SetRequest) returns (EmptyRequest);
+  rpc Set(SetRequest) returns (EmptyResponse);
+  // Delete a <key, value> pair from storage.
+  rpc Delete(DeleteRequest) returns (EmptyResponse);
+
+  // MultiSet set a list of <key, value> pairs on storage, if they correspond all to this node.
+  rpc MultiSet(MultiSetRequest) returns (EmptyResponse);
+  // MultiDelete delete an interval of <key, value> pairs from storage, if they correspond all to this node.
+  rpc MultiDelete(MultiDeleteRequest) returns (EmptyResponse);
 }
 
-// Empty request for null parameters and returns.
+
+// Empty request for null parameters.
 message EmptyRequest {}
+
+// Empty response for null returns.
+message EmptyResponse {}
 
 // Identifier of a node.
 message ID{
@@ -40,22 +47,45 @@ message ID{
 
 // Node contains an ID and an address.
 message Node {
-  bytes id = 1;
-  string addr = 2;
+  bytes ID = 1;
+  string Address = 2;
 }
+
 
 // GetRequest contains the key of a desired value.
 message GetRequest {
-  string key = 1;
+  string Key = 1;
+  bool FromLocal = 2;
 }
 
 // GetResponse contains the value of a requested key.
 message GetResponse {
-  bytes value = 1;
+  bytes Value = 1;
 }
 
 // SetRequest contains the <key, value> pair to set on storage.
 message SetRequest {
-  string key = 1;
-  string value = 2;
+  string Key = 1;
+  string Value = 2;
+  bool FromLocal = 3;
+}
+
+// DeleteRequest contains the key to eliminate.
+message DeleteRequest {
+  string Key = 1;
+  bool FromLocal = 2;
+}
+
+
+// MultiSetRequest contains the limits of the interval of keys to eliminate.
+message MultiSetRequest {
+  repeated string keys = 1;
+  repeated string values = 2;
+  bool FromLocal = 3;
+}
+
+// MultiDeleteRequest contains the limits of the interval of keys to eliminate.
+message MultiDeleteRequest {
+  repeated string keys = 1;
+  bool FromLocal = 2;
 }

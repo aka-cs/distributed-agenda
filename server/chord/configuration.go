@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Configuration of the Node.
+// Configuration of Node.
 type Configuration struct {
 	Hash     func() hash.Hash // Hash function to use
 	HashSize int              // Hash size supported

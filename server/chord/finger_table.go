@@ -21,7 +21,7 @@ func NewFingerTable(node *chord.Node, size int) FingerTable {
 
 	// Build and then add the necessary fingers to the array.
 	for i := range hand {
-		hand[i] = Finger{FingerID(node.Id, i, size), nil}
+		hand[i] = Finger{FingerID(node.ID, i, size), nil}
 	}
 
 	// Return the FingerTable.
@@ -30,12 +30,12 @@ func NewFingerTable(node *chord.Node, size int) FingerTable {
 
 // Node finger table methods.
 
-// ClosestFinger found the closest Finger preceding this ID.
+// ClosestFinger found the closest finger preceding this ID.
 func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 	// Iterate the finger table in reverse, and return the first finger
 	// such that the finger ID is between this node ID and the parameter ID.
 	for i := len(node.fingerTable) - 1; i >= 0; i-- {
-		if Between(node.fingerTable[i].ID, node.Id, ID, false, true) {
+		if Between(node.fingerTable[i].ID, node.ID, ID, false, true) {
 			return node.fingerTable[i].Node
 		}
 	}
@@ -47,7 +47,7 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 // FixFinger update a particular finger on the finger table, and return the index of the next finger to update.
 func (node *Node) FixFinger(next int) int {
 	m := node.config.HashSize                // Obtain the ring size.
-	nextID := FingerID(node.Id, next, m)     // Obtain n + 2^(next) mod (2^m).
+	nextID := FingerID(node.ID, next, m)     // Obtain n + 2^(next) mod (2^m).
 	suc, err := node.FindIDSuccessor(nextID) // Obtain the node that succeeds ID = n + 2^(next) mod (2^m).
 	if err != nil || suc == nil {
 		// TODO: Check how to handle retry, passing ahead for now

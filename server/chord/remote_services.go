@@ -19,12 +19,12 @@ type RemoteServices interface {
 	GetPredecessor(*chord.Node) (*chord.Node, error)
 	// GetSuccessor returns the node believed to be the current successor of a remote Node.
 	GetSuccessor(*chord.Node) (*chord.Node, error)
-	// FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
-	FindSuccessor(*chord.Node, []byte) (*chord.Node, error)
 	// SetPredecessor sets the predecessor of a remote Node.
 	SetPredecessor(*chord.Node, *chord.Node) error
 	// SetSuccessor sets the successor of a remote Node.
 	SetSuccessor(*chord.Node, *chord.Node) error
+	// FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
+	FindSuccessor(*chord.Node, []byte) (*chord.Node, error)
 	// Notify a remote Node that it possibly have a new predecessor.
 	Notify(*chord.Node, *chord.Node) error
 	// Check if a remote Node is alive.
@@ -32,8 +32,15 @@ type RemoteServices interface {
 
 	// Get the value associated to a key on a remote Node storage.
 	Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error)
-	// Set set a <key, value> pair on a remote Node storage.
+	// Set a <key, value> pair on a remote Node storage.
 	Set(node *chord.Node, req *chord.SetRequest) error
+	// Delete a <key, value> pair from a remote Node storage.
+	Delete(node *chord.Node, req *chord.DeleteRequest) error
+
+	// MultiSet set a list of <key, value> pairs on remote Node storage, if they correspond all to it.
+	MultiSet(node *chord.Node, req *chord.MultiSetRequest) error
+	// MultiDelete delete an interval of <key, value> pairs from remote Node storage, if they correspond all to it.
+	MultiDelete(node *chord.Node, req *chord.MultiDeleteRequest) error
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -155,11 +162,11 @@ func (services *GRPCServices) Stop() {
 	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 }
 
-// GRPCServices remote methods.
+// GRPCServices remote chord methods.
 
 // GetPredecessor returns the node believed to be the current predecessor of a remote Node.
 func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, error) {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +181,7 @@ func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, err
 
 // GetSuccessor returns the node believed to be the current successor of a remote Node.
 func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error) {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -187,24 +194,9 @@ func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error
 	return remoteNode.GetSuccessor(ctx, emptyRequest)
 }
 
-// FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
-func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
-	if err != nil {
-		return nil, err
-	}
-
-	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
-	defer cancel()
-
-	// Return the result of the remote call.
-	return remoteNode.FindSuccessor(ctx, &chord.ID{ID: id})
-}
-
 // SetPredecessor sets the predecessor of a remote Node.
 func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -220,7 +212,7 @@ func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
 
 // SetSuccessor sets the successor of a remote Node.
 func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -234,9 +226,24 @@ func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
 	return err
 }
 
+// FindSuccessor finds the node that succeeds this ID, starting at a remote Node.
+func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	if err != nil {
+		return nil, err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	return remoteNode.FindSuccessor(ctx, &chord.ID{ID: id})
+}
+
 // Notify a remote Node that it possibly have a new predecessor.
 func (services *GRPCServices) Notify(node, pred *chord.Node) error {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -252,7 +259,7 @@ func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 
 // Check if a remote Node is alive.
 func (services *GRPCServices) Check(node *chord.Node) error {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -266,9 +273,11 @@ func (services *GRPCServices) Check(node *chord.Node) error {
 	return err
 }
 
+// GRPCServices remote dictionary methods.
+
 // Get the value associated to a key on a remote Node storage.
 func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -278,12 +287,12 @@ func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*cho
 	defer cancel()
 
 	// Return the result of the remote call.
-	return remoteNode.DirectlyGet(ctx, req)
+	return remoteNode.Get(ctx, req)
 }
 
-// Set set a <key, value> pair on a remote Node storage.
+// Set a <key, value> pair on a remote Node storage.
 func (services *GRPCServices) Set(node *chord.Node, req *chord.SetRequest) error {
-	remoteNode, err := services.Connect(node.Addr) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -293,6 +302,54 @@ func (services *GRPCServices) Set(node *chord.Node, req *chord.SetRequest) error
 	defer cancel()
 
 	// Return the result of the remote call.
-	_, err = remoteNode.DirectlySet(ctx, req)
+	_, err = remoteNode.Set(ctx, req)
+	return err
+}
+
+// Delete a <key, value> pair from a remote Node storage.
+func (services *GRPCServices) Delete(node *chord.Node, req *chord.DeleteRequest) error {
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.Delete(ctx, req)
+	return err
+}
+
+// MultiSet set a list of <key, value> pairs on remote Node storage, if they correspond all to it.
+func (services *GRPCServices) MultiSet(node *chord.Node, req *chord.MultiSetRequest) error {
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.MultiSet(ctx, req)
+	return err
+}
+
+// MultiDelete delete an interval of <key, value> pairs from remote Node storage, if they correspond all to it.
+func (services *GRPCServices) MultiDelete(node *chord.Node, req *chord.MultiDeleteRequest) error {
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.MultiDelete(ctx, req)
 	return err
 }
