@@ -13,5 +13,7 @@ func main() {
 		LogFormat:       "[%lvl%]: %time% - %msg%",
 	})
 
+	go services.StartGroupService()
+	go services.StartEventService()
 	services.StartUserService()
 }

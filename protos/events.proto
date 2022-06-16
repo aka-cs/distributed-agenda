@@ -7,15 +7,10 @@ option go_package = "./server/proto";
 
 message Event{
     int64 id = 1;
-    User user = 2;
 }
 
 message GetEventRequest{
     int64 id = 1;
-}
-
-message GetAllUserEventsRequest{
-    User user = 1;
 }
 
 message CreateEventRequest{
@@ -31,10 +26,6 @@ message DeleteEventRequest{
 }
 
 message GetEventResponse{
-    Event event = 1;
-}
-
-message GetAllUserEventsResponse{
     Event event = 1;
 }
 
@@ -54,8 +45,6 @@ message DeleteEventResponse{
 service EventsService{
 
     rpc GetEvent(GetEventRequest) returns (GetEventResponse){}
-
-    rpc GetAllEvents(GetAllUserEventsRequest) returns (stream GetAllUserEventsResponse){}
 
     rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse){}
 

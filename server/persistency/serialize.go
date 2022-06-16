@@ -12,8 +12,6 @@ func Save[T any](object T, path string) error {
 	fullPath := filepath.Join("resources", path+".bin")
 	dir := filepath.Dir(fullPath)
 
-	log.Infof(dir + "\n")
-
 	err := os.MkdirAll(dir, os.ModePerm)
 
 	if err != nil {
@@ -22,6 +20,8 @@ func Save[T any](object T, path string) error {
 	}
 
 	dataFile, err := os.Create(fullPath)
+
+	defer closeFile(dataFile)
 
 	if err != nil {
 		log.Errorf("Error creating file:\n%v\n", err)
@@ -35,11 +35,6 @@ func Save[T any](object T, path string) error {
 		return err
 	}
 
-	err = dataFile.Close()
-	if err != nil {
-		log.Errorf("Error closing file:\n%v\n", err)
-		return err
-	}
 	return nil
 }
 
@@ -49,6 +44,7 @@ func Load[T any](path string) (T, error) {
 	var empty T
 
 	dataFile, err := os.Open(filepath.Join("resources", path+".bin"))
+	defer closeFile(dataFile)
 
 	if err != nil {
 		log.Errorf("Error opening file:\n%v\n", err)
@@ -63,12 +59,21 @@ func Load[T any](path string) (T, error) {
 		return empty, err
 	}
 
-	err = dataFile.Close()
+	return result, nil
+}
+
+func Delete(path string) error {
+	err := os.Remove(filepath.Join("resources", path+".bin"))
 
 	if err != nil {
-		log.Errorf("Error closing file:\n%v\n", err)
-		return empty, err
+		log.Errorf("Error deleting file:\n%v\n", err)
 	}
+	return err
+}
 
-	return result, nil
+func closeFile(file *os.File) {
+	err := file.Close()
+	if err != nil {
+		log.Errorf("Error closing file:\n%v\n", err)
+	}
 }
