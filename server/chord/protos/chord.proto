@@ -63,15 +63,17 @@ message GetResponse {
 message SetRequest {
   string Key = 1;
   string Value = 2;
+  bool Replica = 3;
 }
 
 // DeleteRequest contains the key to eliminate.
 message DeleteRequest {
   string Key = 1;
+  bool Replica = 3;
 }
 
 // BuildRequest contains the initial <key, value> pairs of the storage.
 message BuildRequest {
-  repeated string keys = 1;
-  repeated string values = 2;
+  repeated string Keys = 1;
+  repeated string Values = 2;
 }
