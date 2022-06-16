@@ -56,7 +56,7 @@ func NewNode(address string) (*Node, error) {
 	return &node, nil
 }
 
-// Node internal methods.
+// Node server internal methods.
 
 // Join a Node to the Chord ring, using another known node.
 func (node *Node) Join(knownNode *chord.Node) error {
@@ -197,6 +197,8 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 
 	return suc, nil
 }
+
+// Node dictionary internal methods.
 
 // LocateKey locate the node that stores key.
 func (node *Node) LocateKey(key string) (*chord.Node, error) {
