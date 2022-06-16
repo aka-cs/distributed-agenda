@@ -26,11 +26,8 @@ service Chord {
   rpc Set(SetRequest) returns (EmptyResponse);
   // Delete a <key, value> pair from storage.
   rpc Delete(DeleteRequest) returns (EmptyResponse);
-
-  // MultiSet set a list of <key, value> pairs on storage, if they correspond all to this node.
-  rpc MultiSet(MultiSetRequest) returns (EmptyResponse);
-  // MultiDelete delete an interval of <key, value> pairs from storage, if they correspond all to this node.
-  rpc MultiDelete(MultiDeleteRequest) returns (EmptyResponse);
+  // BuildStorage initialize the storage dictionary, from a list of <key, value> pairs.
+  rpc BuildStorage(BuildRequest) returns (EmptyResponse);
 }
 
 
@@ -55,7 +52,6 @@ message Node {
 // GetRequest contains the key of a desired value.
 message GetRequest {
   string Key = 1;
-  bool FromLocal = 2;
 }
 
 // GetResponse contains the value of a requested key.
@@ -67,25 +63,15 @@ message GetResponse {
 message SetRequest {
   string Key = 1;
   string Value = 2;
-  bool FromLocal = 3;
 }
 
 // DeleteRequest contains the key to eliminate.
 message DeleteRequest {
   string Key = 1;
-  bool FromLocal = 2;
 }
 
-
-// MultiSetRequest contains the limits of the interval of keys to eliminate.
-message MultiSetRequest {
+// BuildRequest contains the initial <key, value> pairs of the storage.
+message BuildRequest {
   repeated string keys = 1;
   repeated string values = 2;
-  bool FromLocal = 3;
-}
-
-// MultiDeleteRequest contains the limits of the interval of keys to eliminate.
-message MultiDeleteRequest {
-  repeated string keys = 1;
-  bool FromLocal = 2;
 }

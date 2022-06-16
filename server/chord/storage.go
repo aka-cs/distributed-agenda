@@ -8,8 +8,7 @@ type Storage interface {
 	Get(string) ([]byte, error)
 	Set(string, string) error
 	Delete(string) error
-	MultiSet([]string, []string) error
-	MultiDelete([]string) error
+	Build([]string, []string) error
 	// Between([]byte, []byte) ([]*chord.KV, error)
 }
 

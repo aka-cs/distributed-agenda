@@ -307,10 +307,14 @@ func (node *Node) Check(ctx context.Context) (*chord.EmptyResponse, error) {
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
 	keyNode := node.Node // By default, find the key in the local storage.
-	var err error
+
+	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		return nil, err
+	}
 
 	// If the requested key is not necessarily local.
-	if !req.FromLocal {
+	if node.predecessor == nil || Between(keyID, node.predecessor.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			return nil, err
@@ -318,7 +322,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 	}
 
 	// If the node that stores the key is this node, directly get the associated value from this node storage.
-	if req.FromLocal || Equals(keyNode.ID, node.ID) {
+	if Equals(keyNode.ID, node.ID) {
 		node.dictLock.RLock()                      // Lock the dictionary to read it, and unlock it after.
 		value, err := node.dictionary.Get(req.Key) // Get the key value from storage.
 		node.dictLock.RUnlock()
@@ -328,18 +332,21 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 		// Return the key value.
 		return &chord.GetResponse{Value: value}, nil
 	}
-	// Otherwise, return the result of the remote call on the correspondent node, resolving local.
-	req.FromLocal = true
+	// Otherwise, return the result of the remote call on the correspondent node.
 	return node.RPC.Get(keyNode, req)
 }
 
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
 	keyNode := node.Node // By default, set the <key, value> pair on the local storage.
-	var err error
+
+	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		return nil, err
+	}
 
 	// If the requested key is not necessarily local.
-	if !req.FromLocal {
+	if node.predecessor == nil || Between(keyID, node.predecessor.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node to which that key corresponds.
 		if err != nil {
 			return nil, err
@@ -347,7 +354,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	}
 
 	// If the node that stores the key is this node, directly set the <key, value> pair on this node storage.
-	if req.FromLocal || Equals(keyNode.ID, node.ID) {
+	if Equals(keyNode.ID, node.ID) {
 		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
 		defer node.dictLock.Unlock()
 
@@ -358,18 +365,21 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 		return emptyResponse, nil
 	}
-	// Otherwise, return the result of the remote call on the correspondent node, resolving local.
-	req.FromLocal = true
+	// Otherwise, return the result of the remote call on the correspondent node.
 	return emptyResponse, node.RPC.Set(keyNode, req)
 }
 
 // Delete a <key, value> pair from storage.
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
 	keyNode := node.Node // By default, delete the key from the local storage.
-	var err error
+
+	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		return nil, err
+	}
 
 	// If the requested key is not necessarily local.
-	if !req.FromLocal {
+	if node.predecessor == nil || Between(keyID, node.predecessor.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			return nil, err
@@ -377,7 +387,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	}
 
 	// If the node that stores the key is this node, directly delete the <key, value> pair from this node storage.
-	if req.FromLocal || Equals(keyNode.ID, node.ID) {
+	if Equals(keyNode.ID, node.ID) {
 		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
 		defer node.dictLock.Unlock()
 
@@ -388,15 +398,12 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 		return emptyResponse, err
 	}
-	// Otherwise, return the result of the remote call on the correspondent node, resolving local.
-	req.FromLocal = true
+	// Otherwise, return the result of the remote call on the correspondent node.
 	return emptyResponse, node.RPC.Delete(keyNode, req)
 }
 
-// Node server dictionary multiple key methods.
-
-// MultiSet set a list of <key, value> pairs on storage, if they correspond all to this node.
-func (node *Node) MultiSet(ctx context.Context, req *chord.MultiSetRequest) (*chord.EmptyResponse, error) {
+// BuildStorage initialize the storage dictionary, from a list of <key, value> pairs.
+func (node *Node) BuildStorage(ctx context.Context, req *chord.BuildRequest) (*chord.EmptyResponse, error) {
 	keys := req.Keys     // Obtain the keys to add.
 	values := req.Values // Obtain its correspondent values.
 
@@ -411,103 +418,32 @@ func (node *Node) MultiSet(ctx context.Context, req *chord.MultiSetRequest) (*ch
 	}
 
 	keyNode := node.Node // By default, set the <key, value> pairs in the local storage.
-	predKeyNode := node.predecessor
-	var err error
 
-	// If the requested keys are not necessarily local.
-	if !req.FromLocal {
+	keyID, err := HashKey(keys[0], node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		return nil, err
+	}
+
+	// If the requested key is not necessarily local.
+	if node.predecessor == nil || Between(keyID, node.predecessor.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(keys[0]) // Locate the node that stores the start key.
 		if err != nil {
 			return nil, err
-		}
-
-		predKeyNode, err = node.RPC.GetPredecessor(keyNode) // Obtain its predecessor.
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Check if all the keys belong to the correspondent node.
-	for _, key := range keys {
-		// Check if this key ID is in the (key node predecessor ID, key node ID] interval
-		between, err := KeyBetween(key, node.config.Hash, predKeyNode.ID, keyNode.ID, false, true)
-		if err != nil {
-			return nil, err
-		}
-		// If the condition not holds, then the list of keys is invalid.
-		if !between {
-			return nil, errors.New("invalid list of keys to delete: the keys are stored on different nodes")
 		}
 	}
 
 	// If the node that stores the key is this node, directly set the <key, value> pairs on this node storage.
-	if req.FromLocal || Equals(keyNode.ID, node.ID) {
+	if Equals(keyNode.ID, node.ID) {
 		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
 		defer node.dictLock.Unlock()
 
-		err := node.dictionary.MultiSet(req.Keys, req.Values) // Set the <key, value> pairs on the storage.
+		err := node.dictionary.Build(req.Keys, req.Values) // Set the <key, value> pairs on the storage.
 		if err != nil {
 			return nil, err
 		}
 
 		return emptyResponse, err
 	}
-	// Otherwise, return the result of the remote call on the correspondent node, resolving local.
-	req.FromLocal = true
-	return emptyResponse, node.RPC.MultiSet(keyNode, req)
-}
-
-// MultiDelete delete an interval of <key, value> pairs from storage, if they correspond all to this node.
-func (node *Node) MultiDelete(ctx context.Context, req *chord.MultiDeleteRequest) (*chord.EmptyResponse, error) {
-	keys := req.Keys // Obtain the keys to delete.
-	// If there are no keys, return.
-	if keys == nil || len(keys) == 0 {
-		return emptyResponse, nil
-	}
-
-	keyNode := node.Node // By default, delete the keys from the local storage.
-	predKeyNode := node.predecessor
-	var err error
-
-	// If the requested keys are not necessarily local.
-	if !req.FromLocal {
-		keyNode, err = node.LocateKey(keys[0]) // Locate the node that stores the start key.
-		if err != nil {
-			return nil, err
-		}
-
-		predKeyNode, err = node.RPC.GetPredecessor(keyNode) // Obtain its predecessor.
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Check if all the keys belong to the correspondent node.
-	for _, key := range keys {
-		// Check if this key ID is in the (key node predecessor ID, key node ID] interval
-		between, err := KeyBetween(key, node.config.Hash, predKeyNode.ID, keyNode.ID, false, true)
-		if err != nil {
-			return nil, err
-		}
-		// If the condition not holds, then the list of keys is invalid.
-		if !between {
-			return nil, errors.New("invalid list of keys to delete: the keys are stored on different nodes")
-		}
-	}
-
-	// If the node that stores the key is this node, directly delete the <key, value> pairs from this node storage.
-	if req.FromLocal || Equals(keyNode.ID, node.ID) {
-		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
-		defer node.dictLock.Unlock()
-
-		err := node.dictionary.MultiDelete(req.Keys) // Delete the <key, value> pairs from storage.
-		if err != nil {
-			return nil, err
-		}
-
-		return emptyResponse, err
-	}
-	// Otherwise, return the result of the remote call on the correspondent node, resolving local.
-	req.FromLocal = true
-	return emptyResponse, node.RPC.MultiDelete(keyNode, req)
+	// Otherwise, return the result of the remote call on the correspondent node.
+	return emptyResponse, node.RPC.BuildStorage(keyNode, req)
 }
