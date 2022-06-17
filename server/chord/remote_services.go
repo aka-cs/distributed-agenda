@@ -36,8 +36,10 @@ type RemoteServices interface {
 	Set(node *chord.Node, req *chord.SetRequest) error
 	// Delete a <key, value> pair from a remote node storage.
 	Delete(node *chord.Node, req *chord.DeleteRequest) error
-	// TransferKeys set a list of <key, values> pairs on the storage dictionary of a remote node.
-	TransferKeys(node *chord.Node, req *chord.TransferRequest) error
+	// Extend set a list of <key, values> pairs on the storage dictionary of a remote node.
+	Extend(node *chord.Node, req *chord.ExtendRequest) error
+	// Detach deletes all <key, values> pairs in a given interval storage of a remote node.
+	Detach(node *chord.Node, req *chord.DetachRequest) error
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -319,8 +321,8 @@ func (services *GRPCServices) Delete(node *chord.Node, req *chord.DeleteRequest)
 	return err
 }
 
-// TransferKeys set a list of <key, values> pairs on the storage dictionary of a remote node.
-func (services *GRPCServices) TransferKeys(node *chord.Node, req *chord.TransferRequest) error {
+// Extend set a list of <key, values> pairs on the storage dictionary of a remote node.
+func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest) error {
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -331,6 +333,22 @@ func (services *GRPCServices) TransferKeys(node *chord.Node, req *chord.Transfer
 	defer cancel()
 
 	// Return the result of the remote call.
-	_, err = remoteNode.TransferKeys(ctx, req)
+	_, err = remoteNode.Extend(ctx, req)
+	return err
+}
+
+// Detach deletes all <key, values> pairs in a given interval storage of a remote node.
+func (services *GRPCServices) Detach(node *chord.Node, req *chord.DetachRequest) error {
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.Detach(ctx, req)
 	return err
 }

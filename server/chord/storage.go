@@ -8,8 +8,9 @@ type Storage interface {
 	Get(string) ([]byte, error)
 	Set(string, string) error
 	Delete(string) error
-	Extend([]string, []string) error
-	DataBetween([]byte, []byte) ([]string, []string)
+	Segment([]byte, []byte) map[string]string
+	Extend(map[string]string) error
+	Detach([]byte, []byte) error
 }
 
 type DistributedStorage struct {
