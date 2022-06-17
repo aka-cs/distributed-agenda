@@ -6,11 +6,11 @@ import (
 )
 
 type Storage interface {
-	Get(string) ([]string, error)
-	Set(string, string)
+	Get(string) ([]byte, error)
+	Set(string, []byte)
 	Delete(string)
-	Segment([]byte, []byte) (map[string]string, error)
-	Extend(map[string]string) error
+	Segment([]byte, []byte) (map[string][]byte, error)
+	Extend(map[string][]byte) error
 	Detach([]byte, []byte) error
 }
 

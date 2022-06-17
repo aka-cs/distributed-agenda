@@ -64,7 +64,7 @@ message GetResponse {
 // SetRequest contains the <key, value> pair to set on storage.
 message SetRequest {
   string Key = 1;
-  string Value = 2;
+  bytes Value = 2;
   bool Replica = 3;
 }
 
@@ -76,7 +76,7 @@ message DeleteRequest {
 
 // ExtendRequest contains the <key, value> pairs to set on the storage.
 message ExtendRequest {
-  map<string, string> dictionary = 1;
+  map<string, bytes> dictionary = 1;
 }
 
 // DetachRequest contains the lower and upper bound of the interval storage to delete.

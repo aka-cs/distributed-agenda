@@ -12,6 +12,8 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
+	successors []*chord.Node
+
 	RPC RemoteServices // Transport layer of this node.
 
 	predecessor *chord.Node  // Predecessor of this node in the ring.
@@ -152,11 +154,14 @@ func (node *Node) CheckPredecessor() {
 
 			// Lock the dictionary to read it, and unlock it after.
 			node.dictLock.RLock()
-			req := chord.ExtendRequest{Dictionary: node.dictionary.Segment(nil, nil)}
+			dictionary, err := node.dictionary.Segment(nil, nil)
 			node.dictLock.RUnlock()
+			if err != nil {
+				return
+			}
 
 			// Transfer the keys to its successor, to update it.
-			err = node.RPC.Extend(suc, &req)
+			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 			if err != nil {
 				return
 			}
@@ -224,31 +229,6 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	// Find and return the successor of this ID.
 	return node.FindIDSuccessor(id)
 }
-
-/*
-// Node dictionary internal methods.
-
-// Segment returns the <key, value> pairs of this node that belongs to the [L, R] interval.
-func (node *Node) Segment(L, R []byte) map[string]string {
-	node.dictLock.RLock()                             // Lock the dictionary to read it, and unlock it after.
-	keys, values := node.dictionary.DataBetween(L, R) // Get the key value from storage.
-	node.dictLock.RUnlock()
-	return keys, values
-}
-
-// Extend set a list of <key, values> pairs on the storage dictionary.
-func (node *Node) Segment(L, R []byte) map[string]string {
-	node.dictLock.RLock()                             // Lock the dictionary to read it, and unlock it after.
-	keys, values := node.dictionary.DataBetween(L, R) // Get the key value from storage.
-	node.dictLock.RUnlock()
-	return keys, values
-}
-
-// Detach delete all keys with ID lower or equal than L.
-func (node *Node) Detach(L []byte) error {
-
-}
-*/
 
 // Node server chord methods.
 
@@ -352,15 +332,22 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		dictionary := node.dictionary.Segment(nil, new.ID) // Obtain the keys to transfer.
-		err = node.dictionary.Detach(nil, pred.ID)         // Delete the keys of the old predecessor.
-		node.dictLock.Unlock()
+		dictionary, err := node.dictionary.Segment(nil, new.ID) // Obtain the keys to transfer.
+		node.dictLock.RUnlock()
 		if err != nil {
 			return nil, err
 		}
 
 		// Build the new predecessor dictionary, by transferring the correspondent keys.
 		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
+		if err != nil {
+			return nil, err
+		}
+
+		// Lock the dictionary to write on it, and unlock it after.
+		node.dictLock.Lock()
+		err = node.dictionary.Detach(nil, pred.ID) // Delete the keys of the old predecessor.
+		node.dictLock.Unlock()
 		if err != nil {
 			return nil, err
 		}
@@ -415,12 +402,9 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
 	// If this request is a replica, resolve it local.
 	if req.Replica {
-		node.dictLock.Lock()                           // Lock the dictionary to write on it, and unlock it after.
-		err := node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
+		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
+		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
-		if err != nil {
-			return nil, err
-		}
 		return emptyResponse, nil
 	}
 
@@ -445,12 +429,9 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 	// If the key corresponds to this node, directly set the <key, value> pair on its storage.
 	if Equals(keyNode.ID, node.ID) {
-		node.dictLock.Lock()                           // Lock the dictionary to write on it, and unlock it after.
-		err := node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
+		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
+		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
-		if err != nil {
-			return nil, err
-		}
 
 		node.sucLock.RLock() // Lock the successor to read it, and unlock it after.
 		suc := node.successor
@@ -472,12 +453,9 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
 	// If this request is a replica, resolve it local.
 	if req.Replica {
-		node.dictLock.Lock()                   // Lock the dictionary to write on it, and unlock it after.
-		err := node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
+		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
+		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
-		if err != nil {
-			return nil, err
-		}
 		return emptyResponse, nil
 	}
 
@@ -502,12 +480,9 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 	// If the key corresponds to this node, directly delete the <key, value> pair from its storage.
 	if Equals(keyNode.ID, node.ID) {
-		node.dictLock.Lock()                   // Lock the dictionary to write on it, and unlock it at the end of function.
-		err := node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
+		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it at the end of function.
+		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
-		if err != nil {
-			return nil, err
-		}
 
 		node.sucLock.RLock() // Lock the successor to read it, and unlock it after.
 		suc := node.successor
