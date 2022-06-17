@@ -26,8 +26,8 @@ service Chord {
   rpc Set(SetRequest) returns (EmptyResponse);
   // Delete a <key, value> pair from storage.
   rpc Delete(DeleteRequest) returns (EmptyResponse);
-  // BuildStorage initialize the storage dictionary, from a list of <key, value> pairs.
-  rpc BuildStorage(BuildRequest) returns (EmptyResponse);
+  // TransferKeys set a list of <key, values> pairs on the storage dictionary.
+  rpc TransferKeys(TransferRequest) returns (EmptyResponse);
 }
 
 
@@ -72,8 +72,8 @@ message DeleteRequest {
   bool Replica = 3;
 }
 
-// BuildRequest contains the initial <key, value> pairs of the storage.
-message BuildRequest {
+// TransferRequest contains the <key, value> pairs to set on the storage.
+message TransferRequest {
   repeated string Keys = 1;
   repeated string Values = 2;
 }

@@ -36,8 +36,8 @@ type RemoteServices interface {
 	Set(node *chord.Node, req *chord.SetRequest) error
 	// Delete a <key, value> pair from a remote node storage.
 	Delete(node *chord.Node, req *chord.DeleteRequest) error
-	// BuildStorage initialize the storage dictionary of a remote node, from a list of <key, value> pairs.
-	BuildStorage(node *chord.Node, req *chord.BuildRequest) error
+	// TransferKeys set a list of <key, values> pairs on the storage dictionary of a remote node.
+	TransferKeys(node *chord.Node, req *chord.TransferRequest) error
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -319,8 +319,8 @@ func (services *GRPCServices) Delete(node *chord.Node, req *chord.DeleteRequest)
 	return err
 }
 
-// BuildStorage initialize the storage dictionary of a remote node, from a list of <key, value> pairs.
-func (services *GRPCServices) BuildStorage(node *chord.Node, req *chord.BuildRequest) error {
+// TransferKeys set a list of <key, values> pairs on the storage dictionary of a remote node.
+func (services *GRPCServices) TransferKeys(node *chord.Node, req *chord.TransferRequest) error {
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -331,6 +331,6 @@ func (services *GRPCServices) BuildStorage(node *chord.Node, req *chord.BuildReq
 	defer cancel()
 
 	// Return the result of the remote call.
-	_, err = remoteNode.BuildStorage(ctx, req)
+	_, err = remoteNode.TransferKeys(ctx, req)
 	return err
 }

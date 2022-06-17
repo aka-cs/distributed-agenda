@@ -463,8 +463,8 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	return emptyResponse, node.RPC.Delete(keyNode, req)
 }
 
-// BuildStorage initialize the storage dictionary, from a list of <key, value> pairs.
-func (node *Node) BuildStorage(ctx context.Context, req *chord.BuildRequest) (*chord.EmptyResponse, error) {
+// TransferKeys set a list of <key, values> pairs on the storage dictionary.
+func (node *Node) TransferKeys(ctx context.Context, req *chord.TransferRequest) (*chord.EmptyResponse, error) {
 	keys := req.Keys     // Obtain the keys to add.
 	values := req.Values // Obtain its correspondent values.
 
@@ -478,34 +478,11 @@ func (node *Node) BuildStorage(ctx context.Context, req *chord.BuildRequest) (*c
 		return emptyResponse, nil
 	}
 
-	keyID, err := HashKey(keys[0], node.config.Hash) // Obtain the correspondent ID of the key.
+	node.dictLock.Lock()                                // Lock the dictionary to write on it, and unlock it after.
+	err := node.dictionary.Extend(req.Keys, req.Values) // Set the <key, value> pairs on the storage.
+	node.dictLock.Unlock()
 	if err != nil {
 		return nil, err
 	}
-
-	keyNode := node.Node  // By default, set the <key, value> pairs in the local storage.
-	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
-	pred := node.predecessor
-	node.predLock.RUnlock()
-
-	// If the requested key is not necessarily local.
-	if pred == nil || Between(keyID, pred.ID, node.ID, false, true) {
-		keyNode, err = node.LocateKey(keys[0]) // Locate the node that stores the start key.
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// If the node that stores the key is this node, directly set the <key, value> pairs on this node storage.
-	if Equals(keyNode.ID, node.ID) {
-		node.dictLock.Lock()                               // Lock the dictionary to write on it, and unlock it at the end of function.
-		err := node.dictionary.Build(req.Keys, req.Values) // Set the <key, value> pairs on the storage.
-		node.dictLock.Unlock()
-		if err != nil {
-			return nil, err
-		}
-		return emptyResponse, err
-	}
-	// Otherwise, return the result of the remote call on the correspondent node.
-	return emptyResponse, node.RPC.BuildStorage(keyNode, req)
+	return emptyResponse, err
 }
