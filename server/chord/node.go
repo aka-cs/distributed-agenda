@@ -211,6 +211,14 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	return node.FindIDSuccessor(id)
 }
 
+// DataBetween returns the <key, value> pairs of this node that belongs to the [L, R) interval.
+func (node *Node) DataBetween(L, R []byte) ([]string, []string) {
+	node.dictLock.RLock()                             // Lock the dictionary to read it, and unlock it after.
+	keys, values := node.dictionary.DataBetween(L, R) // Get the key value from storage.
+	node.dictLock.RUnlock()
+	return keys, values
+}
+
 // Node server chord methods.
 
 // GetPredecessor returns the node believed to be the current predecessor.
@@ -470,15 +478,18 @@ func (node *Node) BuildStorage(ctx context.Context, req *chord.BuildRequest) (*c
 		return emptyResponse, nil
 	}
 
-	keyNode := node.Node // By default, set the <key, value> pairs in the local storage.
-
 	keyID, err := HashKey(keys[0], node.config.Hash) // Obtain the correspondent ID of the key.
 	if err != nil {
 		return nil, err
 	}
 
+	keyNode := node.Node  // By default, set the <key, value> pairs in the local storage.
+	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
 	// If the requested key is not necessarily local.
-	if node.predecessor == nil || Between(keyID, node.predecessor.ID, node.ID, false, true) {
+	if pred == nil || Between(keyID, pred.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(keys[0]) // Locate the node that stores the start key.
 		if err != nil {
 			return nil, err
@@ -487,14 +498,12 @@ func (node *Node) BuildStorage(ctx context.Context, req *chord.BuildRequest) (*c
 
 	// If the node that stores the key is this node, directly set the <key, value> pairs on this node storage.
 	if Equals(keyNode.ID, node.ID) {
-		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
-		defer node.dictLock.Unlock()
-
+		node.dictLock.Lock()                               // Lock the dictionary to write on it, and unlock it at the end of function.
 		err := node.dictionary.Build(req.Keys, req.Values) // Set the <key, value> pairs on the storage.
+		node.dictLock.Unlock()
 		if err != nil {
 			return nil, err
 		}
-
 		return emptyResponse, err
 	}
 	// Otherwise, return the result of the remote call on the correspondent node.

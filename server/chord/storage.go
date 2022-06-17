@@ -9,7 +9,7 @@ type Storage interface {
 	Set(string, string) error
 	Delete(string) error
 	Build([]string, []string) error
-	// Between([]byte, []byte) ([]*chord.KV, error)
+	DataBetween([]byte, []byte) ([]string, []string)
 }
 
 type DistributedStorage struct {
