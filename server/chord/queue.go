@@ -12,7 +12,7 @@ type Queue[T any] struct {
 }
 
 type QueueNode[T any] struct {
-	value T
+	value *T
 	prev  *QueueNode[T]
 	next  *QueueNode[T]
 }
@@ -21,7 +21,7 @@ func NewQueue[T any](capacity int) *Queue[T] {
 	return &Queue[T]{first: nil, last: nil, size: 0, capacity: capacity}
 }
 
-func (queue *Queue[T]) PushBeg(value T) error {
+func (queue *Queue[T]) PushBeg(value *T) error {
 	if queue.size == queue.capacity {
 		return errors.New("queue filled")
 	}
@@ -39,7 +39,7 @@ func (queue *Queue[T]) PushBeg(value T) error {
 	return nil
 }
 
-func (queue *Queue[T]) PopBeg() (T, error) {
+func (queue *Queue[T]) PopBeg() (*T, error) {
 	if queue.size == 0 {
 		return nil, errors.New("queue empty")
 	}
@@ -58,7 +58,7 @@ func (queue *Queue[T]) PopBeg() (T, error) {
 	return value, nil
 }
 
-func (queue *Queue[T]) PushBack(value T) error {
+func (queue *Queue[T]) PushBack(value *T) error {
 	if queue.size == queue.capacity {
 		return errors.New("queue filled")
 	}
@@ -76,7 +76,7 @@ func (queue *Queue[T]) PushBack(value T) error {
 	return nil
 }
 
-func (queue *Queue[T]) PopBack() (T, error) {
+func (queue *Queue[T]) PopBack() (*T, error) {
 	if queue.size == 0 {
 		return nil, errors.New("queue empty")
 	}

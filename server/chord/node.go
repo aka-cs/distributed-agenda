@@ -14,7 +14,7 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
-	successors *Queue[*chord.Node]
+	successors *Queue[chord.Node]
 
 	RPC RemoteServices // Transport layer of this node.
 
@@ -348,7 +348,7 @@ func (node *Node) PeriodicallyCheckSuccessor() {
 }
 
 // FixSuccessor fix an entry of the successor queue.
-func (node *Node) FixSuccessor(suc *QueueNode[*chord.Node]) *QueueNode[*chord.Node] {
+func (node *Node) FixSuccessor(suc *QueueNode[chord.Node]) *QueueNode[chord.Node] {
 	queue := node.successors
 
 	if suc == queue.last && queue.capacity == queue.size {
@@ -380,7 +380,7 @@ func (node *Node) FixSuccessor(suc *QueueNode[*chord.Node]) *QueueNode[*chord.No
 // PeriodicallyFixSuccessor periodically checks whether predecessor has failed.
 func (node *Node) PeriodicallyFixSuccessor() {
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
-	var suc *QueueNode[*chord.Node] = nil
+	var suc *QueueNode[chord.Node] = nil
 
 	for {
 		select {
