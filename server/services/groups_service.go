@@ -167,10 +167,10 @@ func (*GroupsServer) RemoveUser(_ context.Context, request *proto.RemoveUserRequ
 	return &proto.RemoveUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
-func StartGroupService() {
+func StartGroupService(network string, address string) {
 	log.Infof("Group Service Started\n")
 
-	lis, err := net.Listen("tcp", "0.0.0.0:50052")
+	lis, err := net.Listen(network, address)
 
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
