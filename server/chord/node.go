@@ -12,7 +12,7 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
-	successors []*chord.Node
+	successors *Queue[*chord.Node]
 
 	RPC RemoteServices // Transport layer of this node.
 
@@ -84,6 +84,56 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	node.sucLock.Unlock()
 
 	return nil
+}
+
+// FindIDSuccessor finds the node that succeeds ID.
+func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
+	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
+	node.fingerLock.RLock()        // Lock the FingerTable to read from it.
+	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
+	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
+
+	// If the correspondent finger is null (this node is isolated), return this node.
+	if pred == nil {
+		return node.Node, nil
+	}
+
+	// If the corresponding finger its itself, the key is stored in its successor.
+	if Equals(pred.ID, node.ID) {
+		// Lock the successor to read it, and unlock it after.
+		node.sucLock.RLock()
+		suc := node.successor
+		node.sucLock.RUnlock()
+
+		// If the successor is null, return this node.
+		if suc == nil {
+			return node.Node, nil
+		}
+
+		return suc, nil
+	}
+
+	suc, err := node.RPC.FindSuccessor(pred, id) // Find the successor of the remote node obtained.
+	if err != nil {
+		return nil, err
+	}
+	// If the successor is null, return this node.
+	if suc == nil {
+		return node.Node, nil
+	}
+
+	return suc, nil
+}
+
+// LocateKey locate the node that stores key.
+func (node *Node) LocateKey(key string) (*chord.Node, error) {
+	id, err := HashKey(key, node.config.Hash) // Obtain the key ID.
+	if err != nil {
+		return nil, err
+	}
+
+	// Find and return the successor of this ID.
+	return node.FindIDSuccessor(id)
 }
 
 // Stabilize this node, updating its successor and notifying it.
@@ -169,6 +219,55 @@ func (node *Node) CheckPredecessor() {
 	}
 }
 
+// CheckSuccessor checks whether successor has failed.
+func (node *Node) CheckSuccessor() {
+	// Lock the successor to read it, and unlock it after.
+	node.sucLock.RLock()
+	suc := node.successor
+	node.sucLock.RUnlock()
+
+	// If successor is null, or it's not alive.
+	if suc == nil || node.RPC.Check(suc) != nil {
+		// If there are substitute successors.
+		if node.successors.size > 0 {
+			suc, err := node.successors.PopBeg() // Take the next successor.
+			if err != nil {
+				return
+			}
+
+			// Lock the successor to write on it, and unlock it after.
+			node.sucLock.Lock()
+			node.successor = suc
+			node.sucLock.Unlock()
+
+			// Lock the dictionary to read it, and unlock it after.
+			node.dictLock.RLock()
+			dictionary, err := node.dictionary.Segment(nil, nil)
+			node.dictLock.RUnlock()
+			if err != nil {
+				return
+			}
+
+			// Transfer the keys to its successor, to update it.
+			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
+			if err != nil {
+				return
+			}
+
+		} else {
+			// Lock the predecessor to read it, and unlock it after.
+			node.predLock.RLock()
+			pred := node.predecessor
+			node.predLock.RUnlock()
+
+			err := node.successors.PushBack(pred)
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
 // PeriodicallyCheckPredecessor periodically checks whether predecessor has failed.
 func (node *Node) PeriodicallyCheckPredecessor() {
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
@@ -180,54 +279,52 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 	}
 }
 
-// FindIDSuccessor finds the node that succeeds ID.
-func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
-	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
-	node.fingerLock.RLock()        // Lock the FingerTable to read from it.
-	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
-	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
+// FixSuccessor fix an entry of the successor queue.
+func (node *Node) FixSuccessor(suc *QueueNode[*chord.Node]) *QueueNode[*chord.Node] {
+	queue := node.successors
 
-	// If the correspondent finger is null (this node is isolated), return this node.
-	if pred == nil {
-		return node.Node, nil
+	if suc == queue.last && queue.capacity == queue.size {
+		return nil
 	}
 
-	// If the corresponding finger its itself, the key is stored in its successor.
-	if Equals(pred.ID, node.ID) {
-		// Lock the successor to read it, and unlock it after.
-		node.sucLock.RLock()
-		suc := node.successor
-		node.sucLock.RUnlock()
-
-		// If the successor is null, return this node.
-		if suc == nil {
-			return node.Node, nil
-		}
-
-		return suc, nil
-	}
-
-	suc, err := node.RPC.FindSuccessor(pred, id) // Find the successor of the remote node obtained.
+	next, err := node.RPC.GetSuccessor(suc.value)
 	if err != nil {
-		return nil, err
-	}
-	// If the successor is null, return this node.
-	if suc == nil {
-		return node.Node, nil
+		err = queue.Remove(suc)
+		if err != nil {
+			return nil
+		}
+		return suc.prev
 	}
 
-	return suc, nil
+	if !Equals(next.ID, node.ID) {
+		if suc == queue.last {
+			err = queue.PushBack(next)
+			if err != nil {
+				return suc
+			}
+		} else {
+			suc.next.value = next
+		}
+	}
+	return suc.next
 }
 
-// LocateKey locate the node that stores key.
-func (node *Node) LocateKey(key string) (*chord.Node, error) {
-	id, err := HashKey(key, node.config.Hash) // Obtain the key ID.
-	if err != nil {
-		return nil, err
-	}
+// PeriodicallyFixSuccessor periodically checks whether predecessor has failed.
+func (node *Node) PeriodicallyFixSuccessor() {
+	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	var suc *QueueNode[*chord.Node] = nil
 
-	// Find and return the successor of this ID.
-	return node.FindIDSuccessor(id)
+	for {
+		select {
+		case <-ticker.C:
+			if suc == nil {
+				suc = node.successors.first
+			}
+			if suc != nil {
+				suc = node.FixSuccessor(suc)
+			}
+		}
+	}
 }
 
 // Node server chord methods.
