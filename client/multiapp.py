@@ -23,7 +23,8 @@ class MultiApp:
         app.add_app("Bar", bar.app)
         app.run()
     """
-    def __init__(self):
+    def __init__(self, user=None):
+        self.user = user
         self.apps = dict()
 
     def add_app(self, title, func):
@@ -37,12 +38,12 @@ class MultiApp:
         """
         self.apps[title] = func
 
-    def run(self):
+    async def run(self):
 
         st.set_page_config(layout='wide')
 
         with st.sidebar:
-            selected = option_menu("Main Menu", list(self.apps.keys()), icons=['house', 'gear'],
+            selected = option_menu("Main Menu" if not self.user else self.user['name'], list(self.apps.keys()), icons=['house', 'gear'],
                                    menu_icon='cast', default_index=0)
-        self.apps[selected]()
+        await self.apps[selected]()
 
