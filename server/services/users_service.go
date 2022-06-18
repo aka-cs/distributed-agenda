@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
+	"strings"
 )
 
 type UserServer struct {
@@ -20,6 +21,7 @@ func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserReques
 	log.Debugf("Create user invoked with %v\n", request)
 
 	user := request.GetUser()
+	user.Username = strings.ToLower(user.Username)
 	path := filepath.Join("User", user.Username)
 
 	if persistency.FileExists(path) {
