@@ -54,23 +54,12 @@ func Between(ID, L, R []byte, includeL, includeR bool) bool {
 
 	// If L < R, return true if L < ID < R.
 	if bytes.Compare(L, R) < 0 {
-		return bytes.Compare(L, ID) < 0 && 0 < bytes.Compare(R, ID)
+		return (bytes.Compare(L, ID) < 0 || L == nil) && (0 < bytes.Compare(R, ID) || R == nil)
 	}
 
 	// If L >= R, this is a segment over the end of the ring.
 	// So, ID is between L and R if L < ID or ID < R.
-	return bytes.Compare(L, ID) < 0 || 0 < bytes.Compare(R, ID)
-}
-
-// KeyBetween checks if a key hash ID is in the (L, R) interval, on the chord ring.
-func KeyBetween(key string, hash func() hash.Hash, L, R []byte, includeL, includeR bool) (bool, error) {
-	ID, err := HashKey(key, hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		return false, err
-	}
-
-	// Return true if the ID is in the interval.
-	return Between(ID, L, R, includeL, includeR), nil
+	return (bytes.Compare(L, ID) < 0 || L == nil) || (0 < bytes.Compare(R, ID) || R == nil)
 }
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {

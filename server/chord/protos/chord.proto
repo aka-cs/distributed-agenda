@@ -26,8 +26,10 @@ service Chord {
   rpc Set(SetRequest) returns (EmptyResponse);
   // Delete a <key, value> pair from storage.
   rpc Delete(DeleteRequest) returns (EmptyResponse);
-  // BuildStorage initialize the storage dictionary, from a list of <key, value> pairs.
-  rpc BuildStorage(BuildRequest) returns (EmptyResponse);
+  // Extend set a list of <key, values> pairs on the storage dictionary.
+  rpc Extend(ExtendRequest) returns (EmptyResponse);
+  // Detach deletes all <key, values> pairs in a given interval storage.
+  rpc Detach(DetachRequest) returns (EmptyResponse);
 }
 
 
@@ -62,16 +64,23 @@ message GetResponse {
 // SetRequest contains the <key, value> pair to set on storage.
 message SetRequest {
   string Key = 1;
-  string Value = 2;
+  bytes Value = 2;
+  bool Replica = 3;
 }
 
 // DeleteRequest contains the key to eliminate.
 message DeleteRequest {
   string Key = 1;
+  bool Replica = 3;
 }
 
-// BuildRequest contains the initial <key, value> pairs of the storage.
-message BuildRequest {
-  repeated string keys = 1;
-  repeated string values = 2;
+// ExtendRequest contains the <key, value> pairs to set on the storage.
+message ExtendRequest {
+  map<string, bytes> dictionary = 1;
+}
+
+// DetachRequest contains the lower and upper bound of the interval storage to delete.
+message DetachRequest {
+  bytes L = 1;
+  bytes R = 2;
 }
