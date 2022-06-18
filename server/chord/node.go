@@ -4,7 +4,9 @@ import (
 	"DistributedTable/chord"
 	"errors"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,13 +30,16 @@ type Node struct {
 	dictLock   sync.RWMutex // Locks the dictionary for reading or writing.
 
 	config *Configuration // General configurations.
+
+	server *grpc.Server // Node server.
+
+	running int32 // Determine if the node is actually running.
+
+	chord.UnimplementedChordServer
 }
 
 // NewNode creates and returns a new Node.
-func NewNode(address string) (*Node, error) {
-	// TODO: Change the default Configuration by an Configuration optional argument.
-	// TODO: Obtain the ring size from the Configuration.
-	configuration := DefaultConfig()                // Obtain the configuration of the node.
+func NewNode(address string, configuration *Configuration) (*Node, error) {
 	id, err := HashKey(address, configuration.Hash) // Obtain the ID relative to this address.
 	if err != nil {
 		return nil, err
@@ -43,22 +48,74 @@ func NewNode(address string) (*Node, error) {
 	// Creates the new node with the obtained ID and same address.
 	innerNode := chord.Node{ID: id, Address: address}
 
-	// Creates the transport layer.
-	transport := NewGRPCServices(configuration)
+	transport := NewGRPCServices(configuration)           // Creates the transport layer.
+	server := grpc.NewServer(configuration.ServerOpts...) // Creates the node server.
 
 	// Instantiates the node.
-	node := Node{Node: &innerNode,
+	node := &Node{Node: &innerNode,
 		predecessor: nil,
 		successor:   &innerNode,
 		RPC:         transport,
 		config:      configuration,
-		fingerTable: NewFingerTable(&innerNode, 160)}
+		server:      server,
+		running:     0,
+		fingerTable: NewFingerTable(&innerNode, configuration.HashSize)}
 
 	// Return the node.
-	return &node, nil
+	return node, nil
 }
 
 // Node server internal methods.
+
+// Start the node services.
+func (node *Node) Start() {
+	atomic.StoreInt32(&node.running, 1)          // Report the node is running.
+	chord.RegisterChordServer(node.server, node) // Register the node server.
+	node.RPC.Start()                             // Start the RPC (transport layer) services.
+	// Start periodically threads.
+	go node.PeriodicallyCheckPredecessor()
+	go node.PeriodicallyCheckSuccessor()
+	go node.PeriodicallyStabilize()
+	go node.PeriodicallyFixSuccessor()
+	go node.PeriodicallyFixFinger()
+}
+
+func (node *Node) Stop() {
+	atomic.StoreInt32(&node.running, 0) // Report the node is shutdown.
+
+	// Notify successor to change its predecessor pointer to our predecessor.
+	// Lock the successor to read it, and unlock it after.
+	node.sucLock.RLock()
+	suc := node.successor
+	node.sucLock.RUnlock()
+
+	// Lock the predecessor to read it, and unlock it after.
+	node.predLock.RLock()
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
+	if suc != nil && pred != nil && !Equals(suc.ID, pred.ID) {
+		// Lock the dictionary to read it, and unlock it after.
+		node.dictLock.RLock()
+		dictionary, err := node.dictionary.Segment(nil, pred.ID) // Obtain the keys to transfer.
+		node.dictLock.RUnlock()
+		if err != nil {
+		}
+
+		// Transfer the predecessor keys to its new successor, to update it.
+		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
+		if err != nil {
+			return
+		}
+
+		err = node.RPC.SetPredecessor(suc, pred)
+		err = node.RPC.SetSuccessor(pred, suc)
+		if err != nil {
+		}
+	}
+
+	node.RPC.Stop()
+}
 
 // Join a Node to the Chord ring, using another known node.
 func (node *Node) Join(knownNode *chord.Node) error {
@@ -192,11 +249,6 @@ func (node *Node) CheckPredecessor() {
 		err := node.RPC.Check(pred)
 		// In case of error, assume predecessor is not alive, and set this node predecessor to null.
 		if err != nil {
-			// Lock the predecessor to write on it, and unlock it after.
-			node.predLock.Lock()
-			node.predecessor = nil
-			node.predLock.Unlock()
-
 			// Lock the successor to read it, and unlock it after.
 			node.sucLock.RLock()
 			suc := node.successor
@@ -204,17 +256,33 @@ func (node *Node) CheckPredecessor() {
 
 			// Lock the dictionary to read it, and unlock it after.
 			node.dictLock.RLock()
-			dictionary, err := node.dictionary.Segment(nil, nil)
+			dictionary, err := node.dictionary.Segment(nil, pred.ID)
 			node.dictLock.RUnlock()
 			if err != nil {
 				return
 			}
+
+			// Lock the predecessor to write on it, and unlock it after.
+			node.predLock.Lock()
+			node.predecessor = nil
+			node.predLock.Unlock()
 
 			// Transfer the keys to its successor, to update it.
 			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 			if err != nil {
 				return
 			}
+		}
+	}
+}
+
+// PeriodicallyCheckPredecessor periodically checks whether predecessor has failed.
+func (node *Node) PeriodicallyCheckPredecessor() {
+	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	for {
+		select {
+		case <-ticker.C:
+			node.CheckPredecessor() // If it's time, check if this node predecessor it's alive.
 		}
 	}
 }
@@ -268,13 +336,13 @@ func (node *Node) CheckSuccessor() {
 	}
 }
 
-// PeriodicallyCheckPredecessor periodically checks whether predecessor has failed.
-func (node *Node) PeriodicallyCheckPredecessor() {
+// PeriodicallyCheckSuccessor periodically checks whether successor has failed.
+func (node *Node) PeriodicallyCheckSuccessor() {
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
-			node.CheckPredecessor() // If it's time, check if this node predecessor it's alive.
+			node.CheckSuccessor() // If it's time, check if this node successor it's alive.
 		}
 	}
 }
@@ -330,7 +398,7 @@ func (node *Node) PeriodicallyFixSuccessor() {
 // Node server chord methods.
 
 // GetPredecessor returns the node believed to be the current predecessor.
-func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
+func (node *Node) GetPredecessor(ctx context.Context, req *chord.EmptyRequest) (*chord.Node, error) {
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
@@ -346,7 +414,7 @@ func (node *Node) GetPredecessor(ctx context.Context, r *chord.EmptyRequest) (*c
 }
 
 // GetSuccessor returns the node believed to be the current successor.
-func (node *Node) GetSuccessor(ctx context.Context, r *chord.EmptyRequest) (*chord.Node, error) {
+func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*chord.Node, error) {
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successor
@@ -402,7 +470,6 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 
 // Notify this node that it possibly have a new predecessor.
 func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResponse, error) {
-	// TODO: Repair successor and local storage in case of error.
 	// Lock the predecessor to read it, and unlock it at the end of function.
 	node.predLock.RLock()
 	pred := node.predecessor
@@ -454,7 +521,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 }
 
 // Check if this node is alive.
-func (node *Node) Check(ctx context.Context) (*chord.EmptyResponse, error) {
+func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.EmptyResponse, error) {
 	return emptyResponse, nil
 }
 
@@ -606,6 +673,17 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 
 	node.dictLock.Lock()                          // Lock the dictionary to write on it, and unlock it after.
 	err := node.dictionary.Extend(req.Dictionary) // Set the <key, value> pairs on the storage.
+	node.dictLock.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return emptyResponse, err
+}
+
+// Detach deletes all <key, values> pairs in a given interval storage.
+func (node *Node) Detach(ctx context.Context, req *chord.DetachRequest) (*chord.EmptyResponse, error) {
+	node.dictLock.Lock()                        // Lock the dictionary to write on it, and unlock it after.
+	err := node.dictionary.Detach(req.L, req.R) // Set the <key, value> pairs on the storage.
 	node.dictLock.Unlock()
 	if err != nil {
 		return nil, err
