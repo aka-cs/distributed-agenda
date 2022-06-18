@@ -17,10 +17,6 @@ message CreateEventRequest{
     Event event = 1;
 }
 
-message EditEventRequest{
-    Event event = 1;
-}
-
 message DeleteEventRequest{
     int64 id = 1;
 }
@@ -30,10 +26,6 @@ message GetEventResponse{
 }
 
 message CreateEventResponse{
-    OperationOutcome result = 1;
-}
-
-message EditEventResponse{
     OperationOutcome result = 1;
 }
 

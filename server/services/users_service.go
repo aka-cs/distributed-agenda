@@ -4,6 +4,8 @@ import (
 	"context"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net"
 	"path/filepath"
 	"server/persistency"
@@ -18,7 +20,13 @@ func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserReques
 	log.Debugf("Create user invoked with %v\n", request)
 
 	user := request.GetUser()
-	err := persistency.Save(user, filepath.Join("User", user.Username))
+	path := filepath.Join("User", user.Username)
+
+	if persistency.FileExists(path) {
+		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "User already exists")
+	}
+
+	err := persistency.Save(user, path)
 
 	if err != nil {
 		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, err

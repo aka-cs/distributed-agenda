@@ -4,6 +4,8 @@ import (
 	"context"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"net"
 	"path/filepath"
 	"server/persistency"
@@ -134,7 +136,7 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 
 		if err != nil {
 			log.Errorf("Error sending response GroupUser:\n%v\n", err)
-			return err
+			return status.Error(codes.Internal, "Error sending response")
 		}
 	}
 

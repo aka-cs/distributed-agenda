@@ -41,19 +41,6 @@ func (*EventsServer) CreateEvent(_ context.Context, request *proto.CreateEventRe
 	return &proto.CreateEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
-func (*EventsServer) EditEvent(_ context.Context, request *proto.EditEventRequest) (*proto.EditEventResponse, error) {
-	log.Debugf("Edit Event invoked with %v\n", request)
-
-	event := request.GetEvent()
-	err := persistency.Save(event, filepath.Join("Event", strconv.FormatInt(event.Id, 10)))
-
-	if err != nil {
-		return &proto.EditEventResponse{Result: proto.OperationOutcome_FAILED}, err
-	}
-
-	return &proto.EditEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
-}
-
 func (*EventsServer) DeleteEvent(_ context.Context, request *proto.DeleteEventRequest) (*proto.DeleteEventResponse, error) {
 	log.Debugf("Delete Event invoked with %v\n", request)
 

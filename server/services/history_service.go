@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
@@ -52,7 +54,7 @@ func (*HistoryServer) GetFullHistory(request *proto.GetFullHistoryRequest, strea
 
 		if err != nil {
 			log.Errorf("Error sending response GetFullHistory:\n%v\n", err)
-			return err
+			return status.Error(codes.Internal, "Error sending response")
 		}
 	}
 	return nil
@@ -78,7 +80,7 @@ func (*HistoryServer) GetHistoryFromOffset(request *proto.GetHistoryFromOffsetRe
 
 		if err != nil {
 			log.Errorf("Error sending response GetHistoryFromOffset:\n%v\n", err)
-			return err
+			return status.Error(codes.Internal, "Error sending response")
 		}
 	}
 	return nil
