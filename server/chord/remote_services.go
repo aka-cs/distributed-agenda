@@ -1,10 +1,10 @@
 package chord
 
 import (
-	"DistributedTable/chord"
 	"errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"server/chord/chord"
 	"sync"
 	"sync/atomic"
 	"time"

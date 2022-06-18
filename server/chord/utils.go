@@ -1,10 +1,10 @@
 package chord
 
 import (
-	"DistributedTable/chord"
 	"bytes"
 	"hash"
 	"math/big"
+	"server/chord/chord"
 )
 
 // Necessary definitions.

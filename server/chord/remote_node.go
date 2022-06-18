@@ -1,8 +1,8 @@
 package chord
 
 import (
-	"DistributedTable/chord"
 	"google.golang.org/grpc"
+	"server/chord/chord"
 	"time"
 )
 

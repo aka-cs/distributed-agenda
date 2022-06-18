@@ -1,7 +1,7 @@
 package chord
 
 import (
-	"DistributedTable/chord"
+	"server/chord/chord"
 	"time"
 )
 
