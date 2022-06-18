@@ -23,7 +23,7 @@ func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserReques
 	path := filepath.Join("User", user.Username)
 
 	if persistency.FileExists(path) {
-		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "User already exists")
+		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "Username is taken")
 	}
 
 	err := persistency.Save(user, path)

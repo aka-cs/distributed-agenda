@@ -40,7 +40,5 @@ service EventsService{
 
     rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse){}
 
-    rpc EditEvent(EditEventRequest) returns (EditEventResponse){}
-
     rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse){}
 }
