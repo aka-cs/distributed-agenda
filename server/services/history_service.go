@@ -34,8 +34,8 @@ func (*HistoryServer) AddHistoryEntry(_ context.Context, request *proto.AddHisto
 	return &proto.AddHistoryEntryResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
-func (*HistoryServer) GetHistory(request *proto.GetHistoryRequest, stream proto.HistoryService_GetHistoryServer) error {
-	log.Debugf("Get History invoked with %v\n", request)
+func (*HistoryServer) GetFullHistory(request *proto.GetFullHistoryRequest, stream proto.HistoryService_GetFullHistoryServer) error {
+	log.Debugf("Get Full History invoked with %v\n", request)
 
 	username := request.GetUsername()
 	path := filepath.Join("History", username)
@@ -46,12 +46,38 @@ func (*HistoryServer) GetHistory(request *proto.GetHistoryRequest, stream proto.
 	}
 
 	for i := 0; i < len(history); i++ {
-		err = stream.Send(&proto.GetHistoryResponse{
+		err = stream.Send(&proto.GetFullHistoryResponse{
 			Entry: &history[i],
 		})
 
 		if err != nil {
-			log.Errorf("Error sending response GetHistory:\n%v\n", err)
+			log.Errorf("Error sending response GetFullHistory:\n%v\n", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (*HistoryServer) GetHistoryFromOffset(request *proto.GetHistoryFromOffsetRequest, stream proto.HistoryService_GetHistoryFromOffsetServer) error {
+	log.Debugf("Get History From Offset invoked with %v\n", request)
+
+	username := request.GetUsername()
+	offset := int(request.GetOffset())
+
+	path := filepath.Join("History", username)
+
+	history, err := persistency.Load[[]proto.HistoryEntry](path)
+	if err != nil {
+		return err
+	}
+
+	for i := offset; i < len(history); i++ {
+		err = stream.Send(&proto.GetHistoryFromOffsetResponse{
+			Entry: &history[i],
+		})
+
+		if err != nil {
+			log.Errorf("Error sending response GetHistoryFromOffset:\n%v\n", err)
 			return err
 		}
 	}

@@ -31,16 +31,27 @@ message AddHistoryEntryResponse{
   OperationOutcome result = 1;
 }
 
-message GetHistoryRequest{
+message GetFullHistoryRequest{
   string username = 1;
 }
 
-message GetHistoryResponse{
+message GetFullHistoryResponse{
+  HistoryEntry entry = 1;
+}
+
+message GetHistoryFromOffsetRequest{
+  string username = 1;
+  int32 offset = 2;
+}
+
+message GetHistoryFromOffsetResponse{
   HistoryEntry entry = 1;
 }
 
 service HistoryService{
   rpc AddHistoryEntry(AddHistoryEntryRequest) returns (AddHistoryEntryResponse){}
 
-  rpc GetHistory(AddHistoryEntryRequest) returns (stream GetHistoryResponse){}
+  rpc GetFullHistory(GetFullHistoryRequest) returns (stream GetFullHistoryResponse){}
+
+  rpc GetHistoryFromOffset(GetHistoryFromOffsetRequest) returns (stream GetHistoryFromOffsetResponse){}
 }
