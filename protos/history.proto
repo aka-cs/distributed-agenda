@@ -1,0 +1,46 @@
+syntax="proto3";
+
+import "users.proto";
+import "groups.proto";
+import "events.proto";
+
+package distributed_agenda;
+option go_package = "./server/proto";
+
+enum Action{
+  CREATE = 0;
+  UPDATE = 1;
+  DELETE = 2;
+}
+
+message HistoryEntry{
+  Action action = 1;
+  oneof entity{
+    User user = 2;
+    Group group = 3;
+    Event event = 4;
+  }
+}
+
+message AddHistoryEntryRequest{
+  HistoryEntry entry = 1;
+  repeated string users = 2;
+}
+
+message AddHistoryEntryResponse{
+  OperationOutcome result = 1;
+}
+
+message GetHistoryRequest{
+  string username = 1;
+}
+
+message GetHistoryResponse{
+  HistoryEntry entry = 1;
+}
+
+service HistoryService{
+  rpc AddHistoryEntry(AddHistoryEntryRequest) returns (AddHistoryEntryResponse){}
+
+  rpc GetHistory(AddHistoryEntryRequest) returns (stream GetHistoryResponse){}
+}

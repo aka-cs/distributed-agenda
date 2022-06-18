@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
-	"strconv"
 )
 
 type UserServer struct {
@@ -19,7 +18,7 @@ func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserReques
 	log.Debugf("Create user invoked with %v\n", request)
 
 	user := request.GetUser()
-	err := persistency.Save(user, filepath.Join("User", strconv.FormatInt(user.Id, 10)))
+	err := persistency.Save(user, filepath.Join("User", user.Username))
 
 	if err != nil {
 		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, err
@@ -31,8 +30,8 @@ func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserReques
 func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
 	log.Debugf("Get user invoked with %v\n", request)
 
-	id := request.GetId()
-	user, err := persistency.Load[proto.User](filepath.Join("User", strconv.FormatInt(id, 10)))
+	username := request.GetUsername()
+	user, err := persistency.Load[proto.User](filepath.Join("User", username))
 
 	if err != nil {
 		return nil, err
@@ -45,7 +44,7 @@ func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (
 	log.Debugf("Edit user invoked with %v\n", request)
 
 	user := request.GetUser()
-	err := persistency.Save(user, filepath.Join("User", strconv.FormatInt(user.Id, 10)))
+	err := persistency.Save(user, filepath.Join("User", user.Username))
 
 	if err != nil {
 		return &proto.EditUserResponse{Result: proto.OperationOutcome_FAILED}, err
@@ -54,10 +53,10 @@ func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (
 	return &proto.EditUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
-func StartUserService() {
+func StartUserService(network string, address string) {
 	log.Infof("User Service Started\n")
 
-	lis, err := net.Listen("tcp", "0.0.0.0:50051")
+	lis, err := net.Listen(network, address)
 
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)

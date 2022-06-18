@@ -67,10 +67,10 @@ func (*EventsServer) DeleteEvent(_ context.Context, request *proto.DeleteEventRe
 	return &proto.DeleteEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
-func StartEventService() {
+func StartEventService(network string, address string) {
 	log.Infof("Event Service Started\n")
 
-	lis, err := net.Listen("tcp", "0.0.0.0:50053")
+	lis, err := net.Listen(network, address)
 
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
