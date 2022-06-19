@@ -2,6 +2,7 @@ package chord
 
 import (
 	"errors"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"server/chord/chord"
@@ -140,9 +141,14 @@ func (services *GRPCServices) PeriodicallyCloseConnections() {
 
 // Start the services.
 func (services *GRPCServices) Start() {
+	atomic.StoreInt32(&services.running, 1) // Report the service is running.
+	log.Info("Starting transport layer services...\n")
+
 	services.connections = make(map[string]*RemoteNode) // Create the dictionary of <address, open connection>.
-	atomic.StoreInt32(&services.running, 1)             // Report the service is running.
-	go services.CloseOldConnections()                   // Check and close old connections periodically.
+	// Start periodically threads.
+	go services.CloseOldConnections() // Check and close old connections periodically.
+
+	log.Info("Transport layer services started.\n")
 }
 
 // Stop the services.

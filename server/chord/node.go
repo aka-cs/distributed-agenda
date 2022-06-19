@@ -2,11 +2,11 @@ package chord
 
 import (
 	"errors"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"server/chord/chord"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -14,26 +14,25 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
-	successors *Queue[chord.Node]
-
-	RPC RemoteServices // Transport layer of this node.
-
 	predecessor *chord.Node  // Predecessor of this node in the ring.
 	predLock    sync.RWMutex // Locks the predecessor for reading or writing.
 	successor   *chord.Node  // Successor of this node in the ring.
 	sucLock     sync.RWMutex // Locks the successor for reading or writing.
 
+	descendents *Queue[chord.Node] // Queue of descendents of this node.
+	descLock    sync.RWMutex       // Locks the descendents queue for reading or writing.
+
 	fingerTable FingerTable  // FingerTable of this node.
 	fingerLock  sync.RWMutex // Locks the finger table for reading or writing.
+
+	RPC    RemoteServices // Transport layer of this node.
+	config *Configuration // General configurations.
 
 	dictionary Storage      // Storage of <key, value> pairs of this node.
 	dictLock   sync.RWMutex // Locks the dictionary for reading or writing.
 
-	config *Configuration // General configurations.
-
-	server *grpc.Server // Node server.
-
-	running int32 // Determine if the node is actually running.
+	server   *grpc.Server  // Node server.
+	shutdown chan struct{} // Determine if the node server is actually running.
 
 	chord.UnimplementedChordServer
 }
@@ -54,12 +53,13 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 	// Instantiates the node.
 	node := &Node{Node: &innerNode,
 		predecessor: nil,
-		successor:   &innerNode,
+		successor:   nil,
+		descendents: NewQueue[chord.Node](configuration.StabilizingNodes),
+		fingerTable: NewFingerTable(&innerNode, configuration.HashSize),
 		RPC:         transport,
 		config:      configuration,
-		server:      server,
-		running:     0,
-		fingerTable: NewFingerTable(&innerNode, configuration.HashSize)}
+		dictionary:  NewDictionary(configuration.Hash),
+		server:      server}
 
 	// Return the node.
 	return node, nil
@@ -67,21 +67,30 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 
 // Node server internal methods.
 
-// Start the node services.
-func (node *Node) Start() {
-	atomic.StoreInt32(&node.running, 1)          // Report the node is running.
+// Start the node server.
+func (node *Node) Start() error {
+	node.shutdown = make(chan struct{}) // Report the node server is running.
+	log.Info("Starting server...\n")
+
 	chord.RegisterChordServer(node.server, node) // Register the node server.
-	node.RPC.Start()                             // Start the RPC (transport layer) services.
+	log.Info("Chord services registered.\n")
+
+	node.RPC.Start() // Start the RPC (transport layer) services.
+
 	// Start periodically threads.
 	go node.PeriodicallyCheckPredecessor()
 	go node.PeriodicallyCheckSuccessor()
 	go node.PeriodicallyStabilize()
-	go node.PeriodicallyFixSuccessor()
+	go node.PeriodicallyFixDescendant()
 	go node.PeriodicallyFixFinger()
+
+	log.Info("Server started.\n")
+	return nil
 }
 
-func (node *Node) Stop() {
-	atomic.StoreInt32(&node.running, 0) // Report the node is shutdown.
+// Stop the node server.
+func (node *Node) Stop() error {
+	log.Info("Closing server...\n")
 
 	// Notify successor to change its predecessor pointer to our predecessor.
 	// Lock the successor to read it, and unlock it after.
@@ -94,45 +103,52 @@ func (node *Node) Stop() {
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
+	// If successor and predecessor are not null, and are not the same node, connect them.
 	if suc != nil && pred != nil && !Equals(suc.ID, pred.ID) {
-		// Lock the dictionary to read it, and unlock it after.
-		node.dictLock.RLock()
-		dictionary, err := node.dictionary.Segment(nil, pred.ID) // Obtain the keys to transfer.
-		node.dictLock.RUnlock()
+		err := node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
+			message := "Error setting new successor.\nError stopping server.\n"
+			log.Error(message)
+			return errors.New(err.Error() + message)
 		}
-
-		// Transfer the predecessor keys to its new successor, to update it.
-		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
-		if err != nil {
-			return
-		}
-
 		err = node.RPC.SetPredecessor(suc, pred)
-		err = node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
+			message := "Error setting new predecessor.\nError stopping server.\n"
+			log.Error(message)
+			log.Error(err.Error() + message)
 		}
 	}
 
-	node.RPC.Stop()
+	node.RPC.Stop()      // Stop the RPC (transport layer) services.
+	close(node.shutdown) // Report the node server is shutdown.
+	log.Info("Server closed.\n")
+	return nil
 }
 
 // Join a Node to the Chord ring, using another known node.
 func (node *Node) Join(knownNode *chord.Node) error {
+	log.Info("Joining new node to chord ring.\n")
+
 	// If knownNode is null, return error: to join this node to the ring, you must know a node already on it.
 	if knownNode == nil {
-		return errors.New("invalid argument: known node cannot be null")
+		message := "Invalid argument, known node cannot be null.\nError joining node to chord ring.\n"
+		log.Error(message)
+		return errors.New(message)
 	}
 
 	// Ask the known remote node if this node already exists on the ring,
 	// finding the node that succeeds this node ID.
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID)
 	if err != nil {
-		return err
+		message := "Error joining node to chord ring.\n"
+		log.Error(err.Error() + message)
+		return errors.New(err.Error() + message)
 	}
 	// If the ID of the obtained node is this node ID, then this node is already on the ring.
 	if Equals(suc.ID, node.ID) {
-		return errors.New("cannot join this node to the ring: a node with this ID already exists")
+		message := "Error joining node to chord ring: a node with this ID already exists.\n"
+		log.Error(message)
+		return errors.New(message)
 	}
 
 	// Lock the successor to write on it, and unlock it after.
@@ -140,20 +156,23 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	node.successor = suc
 	node.sucLock.Unlock()
 
+	err = node.RPC.Notify(suc, node.Node) // Notify the existence of this node to its successor.
+	if err != nil {
+		message := "Error joining node to chord ring.\n"
+		log.Error(err.Error() + message)
+		return errors.New(err.Error() + message)
+	}
 	return nil
 }
 
 // FindIDSuccessor finds the node that succeeds ID.
 func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
+	log.Debug("Finding ID successor.\n")
+
 	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
 	node.fingerLock.RLock()        // Lock the FingerTable to read from it.
 	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
 	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
-
-	// If the correspondent finger is null (this node is isolated), return this node.
-	if pred == nil {
-		return node.Node, nil
-	}
 
 	// If the corresponding finger its itself, the key is stored in its successor.
 	if Equals(pred.ID, node.ID) {
@@ -166,49 +185,63 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 		if suc == nil {
 			return node.Node, nil
 		}
-
+		// Otherwise, return this node successor.
 		return suc, nil
 	}
 
+	// If the corresponding finger it's different to this node.
 	suc, err := node.RPC.FindSuccessor(pred, id) // Find the successor of the remote node obtained.
 	if err != nil {
-		return nil, err
+		message := "Error finding ID successor.\n"
+		log.Error(err.Error() + message)
+		return nil, errors.New(err.Error() + message)
 	}
-	// If the successor is null, return this node.
-	if suc == nil {
-		return node.Node, nil
-	}
-
+	// Otherwise, return the correspondent ID successor.
 	return suc, nil
 }
 
 // LocateKey locate the node that stores key.
 func (node *Node) LocateKey(key string) (*chord.Node, error) {
+	log.Info("Locating key.\n")
+
 	id, err := HashKey(key, node.config.Hash) // Obtain the key ID.
 	if err != nil {
-		return nil, err
+		message := "Error locating key.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
 	}
 
 	// Find and return the successor of this ID.
-	return node.FindIDSuccessor(id)
+	suc, err := node.FindIDSuccessor(id)
+	if err != nil {
+		message := "Error locating key.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
+	}
+	return suc, nil
 }
 
 // Stabilize this node, updating its successor and notifying it.
 func (node *Node) Stabilize() {
+	log.Debug("Stabilizing node.\n")
+
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successor
-	// If successor is null, there is no way to stabilize (and sure nothing to stabilize).
-	if suc == nil {
-		node.sucLock.RUnlock()
-		return
-	}
 	node.sucLock.RUnlock()
 
-	candidate, err := node.RPC.GetPredecessor(suc) // Obtain the predecessor of the successor.
-	// In case of error of any type, return.
-	if err != nil || candidate == nil {
+	// If successor is null, there is no way to stabilize (and sure nothing to stabilize).
+	if suc == nil {
 		return
+	}
+
+	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
+	// In case of error, report it.
+	if err != nil {
+		log.Error(err.Error() + "Error stabilizing node.\n")
+	}
+	if candidate == nil {
+		log.Error("Error stabilizing node: successor node has no predecessor.\n")
 	}
 
 	// If candidate is closer to this node than its current successor, update this node successor
@@ -222,23 +255,31 @@ func (node *Node) Stabilize() {
 	// Notify successor about the existence of its new predecessor.
 	err = node.RPC.Notify(suc, node.Node)
 	if err != nil {
+		log.Error(err.Error() + "Error stabilizing node.\n")
 		return
 	}
 }
 
 // PeriodicallyStabilize periodically stabilize the node.
 func (node *Node) PeriodicallyStabilize() {
+	log.Debug("Periodically stabilize thread started.\n")
+
 	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
 			node.Stabilize() // If it's time, stabilize the node.
+		case <-node.shutdown:
+			ticker.Stop()
+			return
 		}
 	}
 }
 
 // CheckPredecessor checks whether predecessor has failed.
 func (node *Node) CheckPredecessor() {
+	log.Debug("Checking predecessor.\n")
+
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
@@ -249,28 +290,37 @@ func (node *Node) CheckPredecessor() {
 		err := node.RPC.Check(pred)
 		// In case of error, assume predecessor is not alive, and set this node predecessor to null.
 		if err != nil {
-			// Lock the successor to read it, and unlock it after.
-			node.sucLock.RLock()
-			suc := node.successor
-			node.sucLock.RUnlock()
-
-			// Lock the dictionary to read it, and unlock it after.
-			node.dictLock.RLock()
-			dictionary, err := node.dictionary.Segment(nil, pred.ID)
-			node.dictLock.RUnlock()
-			if err != nil {
-				return
-			}
+			log.Error(err.Error() + "Predecessor failed.\n")
 
 			// Lock the predecessor to write on it, and unlock it after.
 			node.predLock.Lock()
 			node.predecessor = nil
 			node.predLock.Unlock()
 
-			// Transfer the keys to its successor, to update it.
-			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
-			if err != nil {
-				return
+			// Lock the successor to read it, and unlock it after.
+			node.sucLock.RLock()
+			suc := node.successor
+			node.sucLock.RUnlock()
+
+			// If successor exists, transfer the old predecessor keys to it, to maintain replication.
+			if suc != nil {
+				log.Info("Absorbing predecessor's keys.\n")
+				// Lock the dictionary to read it, and unlock it after.
+				node.dictLock.RLock()
+				dictionary, err := node.dictionary.Segment(nil, pred.ID)
+				node.dictLock.RUnlock()
+				if err != nil {
+					log.Error("Error obtaining predecessor keys.\n")
+					return
+				}
+
+				// Transfer the keys to this node successor.
+				err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
+				if err != nil {
+					log.Error(err.Error() + "Error transferring keys to successor.\n")
+					return
+				}
+				log.Info("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
 			}
 		}
 	}
@@ -278,17 +328,24 @@ func (node *Node) CheckPredecessor() {
 
 // PeriodicallyCheckPredecessor periodically checks whether predecessor has failed.
 func (node *Node) PeriodicallyCheckPredecessor() {
+	log.Debug("Check predecessor thread started.\n")
+
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
 			node.CheckPredecessor() // If it's time, check if this node predecessor it's alive.
+		case <-node.shutdown:
+			ticker.Stop()
+			return
 		}
 	}
 }
 
 // CheckSuccessor checks whether successor has failed.
 func (node *Node) CheckSuccessor() {
+	log.Debug("Checking successor.\n")
+
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successor
@@ -297,9 +354,10 @@ func (node *Node) CheckSuccessor() {
 	// If successor is null, or it's not alive.
 	if suc == nil || node.RPC.Check(suc) != nil {
 		// If there are substitute successors.
-		if node.successors.size > 0 {
-			suc, err := node.successors.PopBeg() // Take the next successor.
+		if node.descendents.size > 0 {
+			suc, err := node.descendents.PopBeg() // Take the next successor.
 			if err != nil {
+				log.Error("Error obtaining new successor.\n")
 				return
 			}
 
@@ -313,23 +371,28 @@ func (node *Node) CheckSuccessor() {
 			dictionary, err := node.dictionary.Segment(nil, nil)
 			node.dictLock.RUnlock()
 			if err != nil {
+				log.Error("Error obtaining predecessor keys.\n")
 				return
 			}
 
 			// Transfer the keys to its successor, to update it.
 			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 			if err != nil {
+				log.Error(err.Error() + "Error transferring keys to successor.\n")
 				return
 			}
-
 		} else {
+			// If there are no substitute successors, but if there is a predecessor,
+			//add the predecessor to the descendant queue.
+
 			// Lock the predecessor to read it, and unlock it after.
 			node.predLock.RLock()
 			pred := node.predecessor
 			node.predLock.RUnlock()
 
-			err := node.successors.PushBack(pred)
+			err := node.descendents.PushBack(pred) // Add the predecessor to the descendant queue.
 			if err != nil {
+				log.Error("Error adding descendant.\n")
 				return
 			}
 		}
@@ -338,59 +401,96 @@ func (node *Node) CheckSuccessor() {
 
 // PeriodicallyCheckSuccessor periodically checks whether successor has failed.
 func (node *Node) PeriodicallyCheckSuccessor() {
+	log.Debug("Check successor thread started.\n")
+
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
 			node.CheckSuccessor() // If it's time, check if this node successor it's alive.
+		case <-node.shutdown:
+			ticker.Stop()
+			return
 		}
 	}
 }
 
-// FixSuccessor fix an entry of the successor queue.
-func (node *Node) FixSuccessor(suc *QueueNode[chord.Node]) *QueueNode[chord.Node] {
-	queue := node.successors
+// FixDescendant fix an entry of the descendents queue.
+func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node] {
+	log.Debug("Fixing descendant entry.\n")
 
-	if suc == queue.last && queue.capacity == queue.size {
+	node.descLock.RLock()                     // Lock the queue to read it, and unlock it after.
+	queue := node.descendents                 // Obtain this node descendents queue.
+	desc := qn.value                          // Obtain the descendant in this queue node.
+	last := qn == queue.last                  // Verify if this queue node is the last one.
+	fulfilled := queue.capacity == queue.size // Verify if the node descendents queue is fulfilled.
+	node.descLock.RUnlock()
+
+	// If this queue node is the last one, and the queue is fulfilled, return.
+	if last && fulfilled {
 		return nil
 	}
 
-	next, err := node.RPC.GetSuccessor(suc.value)
+	suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this descendant.
+	// If there is an error, then assume this descendant node is dead.
 	if err != nil {
-		err = queue.Remove(suc)
+		node.descLock.Lock()   // Lock the queue to write on it, and unlock it after.
+		err = queue.Remove(qn) // Remove it from the descendents queue.
+		prev := qn.prev        // Obtain the previous node of this queue node.
+		node.descLock.Unlock()
 		if err != nil {
+			log.Error("Error fixing descendant entry: actual one is dead and could not be removed from queue.\n")
 			return nil
 		}
-		return suc.prev
+		// Return the previous node of this queue node.
+		return prev
 	}
 
-	if !Equals(next.ID, node.ID) {
-		if suc == queue.last {
-			err = queue.PushBack(next)
+	// If the obtained successor is not this node.
+	if !Equals(suc.ID, node.ID) {
+		// If this queue node is the last one.
+		if qn == queue.last {
+			node.descLock.Lock()      // Lock the queue to write on it, and unlock it after.
+			err = queue.PushBack(suc) // Push this descendant successor in the queue.
+			node.descLock.Unlock()
 			if err != nil {
-				return suc
+				log.Error("Error fixing descendant entry: cannot push this descendant successor to queue.\n")
+				return nil
 			}
 		} else {
-			suc.next.value = next
+			// Otherwise, fix the next node of this queue node.
+			node.descLock.Lock() // Lock the queue to write on it, and unlock it after.
+			qn.next.value = suc  // Set this descendant successor as value of the next node of this queue node.
+			node.descLock.Unlock()
 		}
 	}
-	return suc.next
+
+	node.descLock.RLock() // Lock the queue to read it, and unlock it after.
+	next := qn.next       // Obtain the next node of this queue node.
+	node.descLock.RUnlock()
+	// Return the next node of this queue node.
+	return next
 }
 
-// PeriodicallyFixSuccessor periodically checks whether predecessor has failed.
-func (node *Node) PeriodicallyFixSuccessor() {
+// PeriodicallyFixDescendant periodically fix entries of the descendents queue.
+func (node *Node) PeriodicallyFixDescendant() {
+	log.Debug("Fix descendant thread started.\n")
+
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
 	var suc *QueueNode[chord.Node] = nil
 
 	for {
 		select {
 		case <-ticker.C:
-			if suc == nil {
-				suc = node.successors.first
+			if suc == nil && node.descendents.size > 0 {
+				suc = node.descendents.first
 			}
 			if suc != nil {
-				suc = node.FixSuccessor(suc)
+				suc = node.FixDescendant(suc)
 			}
+		case <-node.shutdown:
+			ticker.Stop()
+			return
 		}
 	}
 }

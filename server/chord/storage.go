@@ -15,26 +15,26 @@ type Storage interface {
 }
 
 type Dictionary struct {
-	data map[string]string
+	data map[string][]byte
 	Hash func() hash.Hash // Hash function to use
 }
 
 func NewDictionary(hash func() hash.Hash) *Dictionary {
 	return &Dictionary{
-		data: make(map[string]string),
+		data: make(map[string][]byte),
 		Hash: hash,
 	}
 }
 
-func (dictionary *Dictionary) Get(key string) (string, error) {
+func (dictionary *Dictionary) Get(key string) ([]byte, error) {
 	value, ok := dictionary.data[key]
 	if !ok {
-		return "", errors.New("invalid key")
+		return nil, errors.New("invalid key")
 	}
 	return value, nil
 }
 
-func (dictionary *Dictionary) Set(key string, value string) {
+func (dictionary *Dictionary) Set(key string, value []byte) {
 	dictionary.data[key] = value
 }
 
@@ -42,12 +42,12 @@ func (dictionary *Dictionary) Delete(key string) {
 	delete(dictionary.data, key)
 }
 
-func (dictionary *Dictionary) Segment(L, R []byte) (map[string]string, error) {
+func (dictionary *Dictionary) Segment(L, R []byte) (map[string][]byte, error) {
 	if L == nil && R == nil {
 		return dictionary.data, nil
 	}
 
-	data := make(map[string]string)
+	data := make(map[string][]byte)
 	keyIDs := make(map[string][]byte, 0)
 
 	for key, _ := range dictionary.data {
@@ -66,9 +66,16 @@ func (dictionary *Dictionary) Segment(L, R []byte) (map[string]string, error) {
 	return data, nil
 }
 
+func (dictionary *Dictionary) Extend(data map[string][]byte) error {
+	for key, value := range data {
+		dictionary.data[key] = value
+	}
+	return nil
+}
+
 func (dictionary *Dictionary) Detach(L, R []byte) error {
 	if L == nil && R == nil {
-		dictionary.data = make(map[string]string)
+		dictionary.data = make(map[string][]byte)
 	}
 
 	keyIDs := make(map[string][]byte, 0)

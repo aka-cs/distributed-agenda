@@ -17,6 +17,8 @@ type Configuration struct {
 
 	Timeout time.Duration // Timeout of the connection.
 	MaxIdle time.Duration // Max lifetime of a connection.
+
+	StabilizingNodes int // Max number of successors to register in a node, to ensure stabilization.
 }
 
 // DefaultConfig returns a default configuration.
@@ -26,9 +28,10 @@ func DefaultConfig() *Configuration {
 	DialOpts := []grpc.DialOption{grpc.WithInsecure()}
 
 	config := &Configuration{
-		Hash:     sha1.New,
-		HashSize: HashSize,
-		DialOpts: DialOpts,
+		Hash:             sha1.New,
+		HashSize:         HashSize,
+		DialOpts:         DialOpts,
+		StabilizingNodes: 5,
 	}
 
 	config.HashSize = config.Hash().Size()
