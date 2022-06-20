@@ -1,6 +1,6 @@
 syntax="proto3";
 
-import "users.proto";
+import "proto/users.proto";
 
 package distributed_agenda;
 option go_package = "./server/proto";
@@ -17,10 +17,6 @@ message CreateEventRequest{
     Event event = 1;
 }
 
-message EditEventRequest{
-    Event event = 1;
-}
-
 message DeleteEventRequest{
     int64 id = 1;
 }
@@ -30,10 +26,6 @@ message GetEventResponse{
 }
 
 message CreateEventResponse{
-    OperationOutcome result = 1;
-}
-
-message EditEventResponse{
     OperationOutcome result = 1;
 }
 
@@ -47,8 +39,6 @@ service EventsService{
     rpc GetEvent(GetEventRequest) returns (GetEventResponse){}
 
     rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse){}
-
-    rpc EditEvent(EditEventRequest) returns (EditEventResponse){}
 
     rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse){}
 }

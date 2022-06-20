@@ -54,7 +54,7 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 }
 
 func StartAuthServer(rsaPrivateKey string, network string, address string) {
-	log.Infof("Auth service started")
+	log.Infof("Auth service started\n")
 
 	lis, err := net.Listen(network, address)
 

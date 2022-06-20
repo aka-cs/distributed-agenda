@@ -6,9 +6,9 @@ pbc:go-protoc py-protoc;
 
 .PHONY: go-protoc
 go-protoc:
-	$(protoc) --proto_path=./protos --go_out=. --go-grpc_out=. ./protos/*.proto
+	$(protoc) --proto_path=. --go_out=. --go-grpc_out=. ./proto/*.proto
 
 .PHONY: py-protoc
 py-protoc:
-	$(python) -m grpc_tools.protoc --proto_path=./protos --python_out=./client/proto --python_grpc_out=./client/proto \
-	 --mypy_out=./client/proto ./protos/*.proto
+	$(python) -m grpc_tools.protoc --proto_path=. --python_out=./client --python_grpc_out=./client \
+	 --mypy_out=./client -I./client/ ./proto/*.proto

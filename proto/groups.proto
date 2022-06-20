@@ -1,6 +1,6 @@
 syntax="proto3";
 
-import "users.proto";
+import "proto/users.proto";
 
 package distributed_agenda;
 option go_package = "./server/proto";

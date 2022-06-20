@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 from data.create_data import create_table
 
-def app():
+
+async def app():
     st.title('Data Stats')
 
     st.write("This is a sample data stats in the mutliapp.")
