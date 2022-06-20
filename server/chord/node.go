@@ -254,7 +254,13 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	return suc, nil
 }
 
-// Stabilize this node, updating its successor and notifying it.
+// Stabilize this node.
+// To stabilize the node, the predecessor of the successor of this node is searched for.
+// If the obtained node is not this node, and it is closer to this node than its current successor,
+// then update it taking the obtained node as the new successor.
+// Finally, notifies its new successor of this node existence, so that the successor will update itself.
+// TODO: Notify will also transfer keys to this node (but maybe the key list will be empty).
+// TODO: Think about this problem later.
 func (node *Node) Stabilize() {
 	log.Debug("Stabilizing node.\n")
 
@@ -270,7 +276,7 @@ func (node *Node) Stabilize() {
 	}
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
-	// In case of error, report it.
+	// In case of error or null response, report error.
 	if err != nil {
 		log.Error(err.Error() + "Error stabilizing node.\n")
 	}
