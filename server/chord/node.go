@@ -151,8 +151,6 @@ func (node *Node) Stop() error {
 // Join a node to the Chord ring, using another known node.
 // To join the node to the ring, the immediate successor of the node ID in the ring is searched,
 // starting from the known node, and the obtained node is taken as the successor of the node to be joined.
-// Finally, notifies its new successor of this node existence, so that the successor will update itself
-// and provide this node with the keys that now correspond to it.
 func (node *Node) Join(knownNode *chord.Node) error {
 	log.Info("Joining new node to chord ring.\n")
 
@@ -182,13 +180,6 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	node.sucLock.Lock()
 	node.successor = suc // Update this node successor with the obtained node.
 	node.sucLock.Unlock()
-
-	err = node.RPC.Notify(suc, node.Node) // Notify the existence of this node to its new successor.
-	if err != nil {
-		message := "Error joining node to chord ring.\n"
-		log.Error(err.Error() + message)
-		return errors.New(err.Error() + message)
-	}
 	log.Info("Successful join of the node.\n")
 	return nil
 }
@@ -259,9 +250,6 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 // If the obtained node is not this node, and it is closer to this node than its current successor,
 // then update it taking the obtained node as the new successor.
 // Finally, notifies its new successor of this node existence, so that the successor will update itself.
-// The transfer of keys from this node to its successor to maintain replication is not necessary,
-// since the new successor at some point was a predecessor of the old successor, and received from it
-// the replicated keys of this node.
 // TODO: Notify will also transfer keys to this node (but maybe the list of keys will be empty).
 // TODO: Think about this problem later.
 func (node *Node) Stabilize() {
@@ -283,28 +271,23 @@ func (node *Node) Stabilize() {
 	if err != nil {
 		log.Error(err.Error() + "Error stabilizing node.\n")
 	}
-	if candidate == nil {
-		log.Error("Error stabilizing node: successor node has no predecessor.\n")
-	}
 
-	// If candidate is closer to this node than its current successor, update this node successor
-	// with the candidate.
-	if Between(candidate.ID, node.ID, suc.ID, false, false) {
+	// If candidate is not null, and it's closer to this node than its current successor,
+	// update this node successor with the candidate.
+	if candidate != nil && Between(candidate.ID, node.ID, suc.ID, false, false) {
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
 		node.successor = candidate
 		node.sucLock.Unlock()
-
-		// Notify successor about the existence of its new predecessor.
-		err = node.RPC.Notify(suc, node.Node)
-		if err != nil {
-			log.Error(err.Error() + "Error stabilizing node.\n")
-			return
-		}
-		log.Debug("Node stabilized.\n")
-	} else {
-		log.Debug("No stabilization needed.\n")
 	}
+
+	// Notify successor about the existence of its predecessor.
+	err = node.RPC.Notify(suc, node.Node)
+	if err != nil {
+		log.Error(err.Error() + "Error stabilizing node.\n")
+		return
+	}
+	log.Debug("Node stabilized.\n")
 }
 
 // PeriodicallyStabilize periodically stabilize the node.
@@ -401,6 +384,8 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 // is assumed dead, and it is necessary to replace it.
 // To replace it, check that the queue of descendents is not empty and, in this case,
 // the first of them is taken as the new successor.
+// It is necessary to transfer the keys of this node to its new successor, because this new successor
+// only has its own keys and those that corresponded to the old successor.
 // Finally, notifies its new successor of this node existence, so that the successor will update itself.
 // TODO: Notify will also transfer keys to this node (but maybe the list of keys will be empty).
 // TODO: Think about this problem later.
