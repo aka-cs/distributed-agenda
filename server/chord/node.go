@@ -148,19 +148,23 @@ func (node *Node) Stop() error {
 	return nil
 }
 
-// Join a Node to the Chord ring, using another known node.
+// Join a node to the Chord ring, using another known node.
+// To join the node to the ring, the immediate successor of the node ID in the ring is searched,
+// starting from the known node, and the obtained node is taken as the successor of the node to be joined.
+// Finally, notifies its new successor of this node existence, so that the successor will update itself
+// and provide this node with the keys that now correspond to it.
 func (node *Node) Join(knownNode *chord.Node) error {
 	log.Info("Joining new node to chord ring.\n")
 
-	// If knownNode is null, return error: to join this node to the ring, you must know a node already on it.
+	// If the known node is null, return error: to join this node to the ring,
+	// you must know a node already on it.
 	if knownNode == nil {
 		message := "Invalid argument, known node cannot be null.\nError joining node to chord ring.\n"
 		log.Error(message)
 		return errors.New(message)
 	}
 
-	// Ask the known remote node if this node already exists on the ring,
-	// finding the node that succeeds this node ID.
+	// Find the immediate successor of this node ID.
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID)
 	if err != nil {
 		message := "Error joining node to chord ring.\n"
@@ -176,10 +180,10 @@ func (node *Node) Join(knownNode *chord.Node) error {
 
 	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
-	node.successor = suc
+	node.successor = suc // Update this node successor with the obtained node.
 	node.sucLock.Unlock()
 
-	err = node.RPC.Notify(suc, node.Node) // Notify the existence of this node to its successor.
+	err = node.RPC.Notify(suc, node.Node) // Notify the existence of this node to its new successor.
 	if err != nil {
 		message := "Error joining node to chord ring.\n"
 		log.Error(err.Error() + message)
