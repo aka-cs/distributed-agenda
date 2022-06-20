@@ -259,7 +259,7 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 // If the obtained node is not this node, and it is closer to this node than its current successor,
 // then update it taking the obtained node as the new successor.
 // Finally, notifies its new successor of this node existence, so that the successor will update itself.
-// TODO: Notify will also transfer keys to this node (but maybe the key list will be empty).
+// TODO: Notify will also transfer keys to this node (but maybe the list of keys will be empty).
 // TODO: Think about this problem later.
 func (node *Node) Stabilize() {
 	log.Debug("Stabilizing node.\n")
@@ -394,6 +394,16 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 }
 
 // CheckSuccessor checks whether successor has failed.
+// To do this, make a remote call to Check from the successor. If the call fails, the successor
+// is assumed dead, and it is necessary to replace it.
+// To replace it, check that the queue of descendents is not empty and, in this case,
+// the first of them is taken as the new successor.
+// Finally, notifies its new successor of this node existence, so that the successor will update itself.
+// TODO: Notify will also transfer keys to this node (but maybe the list of keys will be empty).
+// TODO: Think about this problem later.
+// As a special case, if the descendants queue is empty, but this node has a predecessor,
+// then the predecessor is added to the descendants queue (to be able to consider chord rings of size 2),
+// and the replacement of the successor is postponed until the next thread cycle.
 func (node *Node) CheckSuccessor() {
 	log.Debug("Checking successor.\n")
 
@@ -405,9 +415,14 @@ func (node *Node) CheckSuccessor() {
 	// If successor is not null, check if it is alive.
 	if suc != nil {
 		err := node.RPC.Check(suc)
+		// If successor is not alive, set it temporally to null.
 		if err != nil {
 			log.Error(err.Error() + "Successor failed.\n")
-			suc = nil // Set successor temporally to null.
+			// Lock the successor to write on it, and unlock it after.
+			node.sucLock.Lock()
+			node.successor = nil
+			suc = nil
+			node.sucLock.Unlock()
 		}
 	}
 
@@ -635,7 +650,9 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 }
 
 // Notify this node that it possibly have a new predecessor.
-func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResponse, error) {
+func (node *Node) Notify(ctx context.Context, req *chord.NotifyRequest) (*chord.EmptyResponse, error) {
+	candidate := req.New
+
 	// Lock the predecessor to read it, and unlock it at the end of function.
 	node.predLock.RLock()
 	pred := node.predecessor
@@ -643,10 +660,10 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 
 	// If the predecessor candidate is closer to this node than its current predecessor, update this node
 	// predecessor with the candidate.
-	if pred == nil || Between(new.ID, pred.ID, node.ID, false, false) {
+	if pred == nil || Between(candidate.ID, pred.ID, node.ID, false, false) {
 		// Lock the predecessor to write on it, and unlock it at the end of function.
 		node.predLock.Lock()
-		node.predecessor = new
+		node.predecessor = candidate
 		node.predLock.Unlock()
 
 		// Lock the successor to read it, and unlock it at the end of function.
@@ -655,21 +672,21 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		node.sucLock.RUnlock()
 
 		// Delete the keys to transfer from successor storage replication.
-		err := node.RPC.Detach(suc, &chord.DetachRequest{L: nil, R: new.ID})
+		err := node.RPC.Detach(suc, &chord.DetachRequest{L: nil, R: candidate.ID})
 		if err != nil {
 			return nil, err
 		}
 
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		dictionary, err := node.dictionary.Segment(nil, new.ID) // Obtain the keys to transfer.
+		dictionary, err := node.dictionary.Segment(nil, candidate.ID) // Obtain the keys to transfer.
 		node.dictLock.RUnlock()
 		if err != nil {
 			return nil, err
 		}
 
 		// Build the new predecessor dictionary, by transferring the correspondent keys.
-		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
+		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
 			return nil, err
 		}

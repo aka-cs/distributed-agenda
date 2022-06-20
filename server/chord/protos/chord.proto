@@ -16,7 +16,7 @@ service Chord {
   // FindSuccessor finds the node that succeeds ID.
   rpc FindSuccessor(ID) returns (Node);
   // Notify this node that it possibly have a new predecessor.
-  rpc Notify(Node) returns (EmptyResponse);
+  rpc Notify(NotifyRequest) returns (EmptyResponse);
   // Check if this Node is alive.
   rpc Check(EmptyRequest) returns (EmptyResponse);
 
@@ -50,6 +50,11 @@ message Node {
   string Address = 2;
 }
 
+// NotifyRequest contains the key of a desired value.
+message NotifyRequest {
+  Node new = 1;
+  map<string, bytes> dictionary = 2;
+}
 
 // GetRequest contains the key of a desired value.
 message GetRequest {
