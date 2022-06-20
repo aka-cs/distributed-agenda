@@ -1,6 +1,7 @@
 package chord
 
 import (
+	log "github.com/sirupsen/logrus"
 	"server/chord/chord"
 	"time"
 )
@@ -45,6 +46,8 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 
 // FixFinger update a particular finger on the finger table, and return the index of the next finger to update.
 func (node *Node) FixFinger(next int) int {
+	log.Debug("Fixing finger entry.\n")
+
 	m := node.config.HashSize                // Obtain the ring size.
 	nextID := FingerID(node.ID, next, m)     // Obtain n + 2^(next) mod (2^m).
 	suc, err := node.FindIDSuccessor(nextID) // Obtain the node that succeeds ID = n + 2^(next) mod (2^m).
@@ -65,8 +68,10 @@ func (node *Node) FixFinger(next int) int {
 
 // PeriodicallyFixFinger periodically fix finger tables.
 func (node *Node) PeriodicallyFixFinger() {
-	next := 0                                        // Index of the actual finger entry to fix.
-	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
+	log.Debug("Fix finger thread started.\n")
+
+	next := 0                                  // Index of the actual finger entry to fix.
+	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:

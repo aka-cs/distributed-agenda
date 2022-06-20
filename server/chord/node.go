@@ -294,7 +294,7 @@ func (node *Node) Stabilize() {
 func (node *Node) PeriodicallyStabilize() {
 	log.Debug("Periodically stabilize thread started.\n")
 
-	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
+	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
@@ -360,6 +360,8 @@ func (node *Node) CheckPredecessor() {
 		} else {
 			log.Debug("Predecessor alive.\n")
 		}
+	} else {
+		log.Debug("There is no predecessor.\n")
 	}
 }
 
@@ -384,11 +386,10 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 // is assumed dead, and it is necessary to replace it.
 // To replace it, check that the queue of descendents is not empty and, in this case,
 // the first of them is taken as the new successor.
+// As a special case, if the descendants queue is empty, but this node has a predecessor,
+// then the predecessor is taken as the new successor.
 // It is necessary to transfer the keys of this node to its new successor, because this new successor
 // only has its own keys and those that corresponded to the old successor.
-// As a special case, if the descendants queue is empty, but this node has a predecessor,
-// then the predecessor is added to the descendants queue (to be able to consider chord rings of size 2),
-// and the replacement of the successor is postponed until the next thread cycle.
 func (node *Node) CheckSuccessor() {
 	log.Debug("Checking successor.\n")
 
@@ -443,6 +444,7 @@ func (node *Node) CheckSuccessor() {
 
 	// If successor still null, there is nothing to do.
 	if suc == nil {
+		log.Debug("There is no successor.\n")
 		return
 	}
 
