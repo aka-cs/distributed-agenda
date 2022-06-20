@@ -67,8 +67,8 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 
 // Node server internal methods.
 
-// Start the node server, by registering the server field of this node as a chord server and
-// starting the periodically threads that stabilizes the services.
+// Start the node server, by registering the server field of this node as a chord server, starting
+// the transport layer services and the periodically threads that stabilizes the server.
 func (node *Node) Start() error {
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 	log.Info("Starting server...\n")
@@ -89,7 +89,11 @@ func (node *Node) Start() error {
 	return nil
 }
 
-// Stop the node server.
+// Stop the node server, by reporting the node services are now shutdown, to make the periodic
+// threads stop themselves eventually, and stopping the transport layer services.
+// In addition, before stopping, the node sends to its successor the keys of its predecessor,
+// to maintain replication.
+// Then he connects them directly, thus leaving the ring.
 func (node *Node) Stop() error {
 	log.Info("Closing server...\n")
 
@@ -116,20 +120,21 @@ func (node *Node) Stop() error {
 			return errors.New(err.Error() + message)
 		}
 
-		// Build the new predecessor dictionary, by transferring the correspondent keys.
-		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
+		// Send to the successor the keys of the predecessor, to maintain replication.
+		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
 			message := "Error transferring keys to successor.\nError stopping server.\n"
-			return nil, err
+			log.Error(message)
+			return errors.New(err.Error() + message)
 		}
 
-		err := node.RPC.SetSuccessor(pred, suc)
+		err = node.RPC.SetSuccessor(pred, suc) // Then, set the successor as a direct successor of predecessor.
 		if err != nil {
 			message := "Error setting new successor.\nError stopping server.\n"
 			log.Error(message)
 			return errors.New(err.Error() + message)
 		}
-		err = node.RPC.SetPredecessor(suc, pred)
+		err = node.RPC.SetPredecessor(suc, pred) // Then, set the predecessor as a direct predecessor of successor.
 		if err != nil {
 			message := "Error setting new predecessor.\nError stopping server.\n"
 			log.Error(message)
