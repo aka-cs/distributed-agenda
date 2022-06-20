@@ -321,6 +321,11 @@ func (node *Node) PeriodicallyStabilize() {
 }
 
 // CheckPredecessor checks whether predecessor has failed.
+// To do this, make a remote call to Check from the predecessor. If the call fails, the predecessor
+// is assumed dead, and it's updated to null.
+// In this case, the keys of the predecessor are absorbed by the current node (these keys are currently
+// already replicated on it). Accordingly, the new keys are also sent to the successor of this node,
+// to maintain replication.
 func (node *Node) CheckPredecessor() {
 	log.Debug("Checking predecessor.\n")
 
