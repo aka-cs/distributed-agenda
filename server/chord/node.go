@@ -67,7 +67,8 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 
 // Node server internal methods.
 
-// Start the node server.
+// Start the node server, by registering the server field of this node as a chord server and
+// starting the periodically threads that stabilizes the services.
 func (node *Node) Start() error {
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 	log.Info("Starting server...\n")
@@ -92,7 +93,7 @@ func (node *Node) Start() error {
 func (node *Node) Stop() error {
 	log.Info("Closing server...\n")
 
-	// Notify successor to change its predecessor pointer to our predecessor.
+	// Change successor predecessor to our predecessor, and vice-versa.
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successor
@@ -105,6 +106,23 @@ func (node *Node) Stop() error {
 
 	// If successor and predecessor are not null, and are not the same node, connect them.
 	if suc != nil && pred != nil && !Equals(suc.ID, pred.ID) {
+		// Lock the dictionary to read it, and unlock it after.
+		node.dictLock.RLock()
+		dictionary, err := node.dictionary.Segment(nil, pred.ID) // Obtain the keys to transfer.
+		node.dictLock.RUnlock()
+		if err != nil {
+			message := "Error transferring keys to successor.\nError stopping server.\n"
+			log.Error(message)
+			return errors.New(err.Error() + message)
+		}
+
+		// Build the new predecessor dictionary, by transferring the correspondent keys.
+		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
+		if err != nil {
+			message := "Error transferring keys to successor.\nError stopping server.\n"
+			return nil, err
+		}
+
 		err := node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
 			message := "Error setting new successor.\nError stopping server.\n"
@@ -115,7 +133,7 @@ func (node *Node) Stop() error {
 		if err != nil {
 			message := "Error setting new predecessor.\nError stopping server.\n"
 			log.Error(message)
-			log.Error(err.Error() + message)
+			return errors.New(err.Error() + message)
 		}
 	}
 
@@ -162,6 +180,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 		log.Error(err.Error() + message)
 		return errors.New(err.Error() + message)
 	}
+	log.Info("Successful join of the node.\n")
 	return nil
 }
 
@@ -197,6 +216,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 		return nil, errors.New(err.Error() + message)
 	}
 	// Otherwise, return the correspondent ID successor.
+	log.Debug("ID successor found.\n")
 	return suc, nil
 }
 
@@ -218,6 +238,7 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 		log.Error(message)
 		return nil, errors.New(err.Error() + message)
 	}
+	log.Info("Successful key location.\n")
 	return suc, nil
 }
 
@@ -232,6 +253,7 @@ func (node *Node) Stabilize() {
 
 	// If successor is null, there is no way to stabilize (and sure nothing to stabilize).
 	if suc == nil {
+		log.Debug("No stabilization needed.\n")
 		return
 	}
 
@@ -251,12 +273,16 @@ func (node *Node) Stabilize() {
 		node.sucLock.Lock()
 		node.successor = candidate
 		node.sucLock.Unlock()
-	}
-	// Notify successor about the existence of its new predecessor.
-	err = node.RPC.Notify(suc, node.Node)
-	if err != nil {
-		log.Error(err.Error() + "Error stabilizing node.\n")
-		return
+
+		// Notify successor about the existence of its new predecessor.
+		err = node.RPC.Notify(suc, node.Node)
+		if err != nil {
+			log.Error(err.Error() + "Error stabilizing node.\n")
+			return
+		}
+		log.Debug("Node stabilized.\n")
+	} else {
+		log.Debug("No stabilization needed.\n")
 	}
 }
 
@@ -322,6 +348,8 @@ func (node *Node) CheckPredecessor() {
 				}
 				log.Info("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
 			}
+		} else {
+			log.Debug("Predecessor alive.\n")
 		}
 	}
 }
@@ -351,10 +379,21 @@ func (node *Node) CheckSuccessor() {
 	suc := node.successor
 	node.sucLock.RUnlock()
 
-	// If successor is null, or it's not alive.
-	if suc == nil || node.RPC.Check(suc) != nil {
+	// If successor is not null, check if it is alive.
+	if suc != nil {
+		err := node.RPC.Check(suc)
+		if err != nil {
+			log.Error(err.Error() + "Successor failed.\n")
+			suc = nil // Set successor temporally to null.
+		}
+	}
+
+	// If successor is null, take a new successor from the descendents queue.
+	if suc == nil {
 		// If there are substitute successors.
 		if node.descendents.size > 0 {
+			log.Info("Substituting successor.\n")
+
 			suc, err := node.descendents.PopBeg() // Take the next successor.
 			if err != nil {
 				log.Error("Error obtaining new successor.\n")
@@ -381,21 +420,25 @@ func (node *Node) CheckSuccessor() {
 				log.Error(err.Error() + "Error transferring keys to successor.\n")
 				return
 			}
+			log.Info("Successful transfer of keys to the new successor.\n")
 		} else {
-			// If there are no substitute successors, but if there is a predecessor,
-			//add the predecessor to the descendant queue.
-
 			// Lock the predecessor to read it, and unlock it after.
 			node.predLock.RLock()
 			pred := node.predecessor
 			node.predLock.RUnlock()
 
-			err := node.descendents.PushBack(pred) // Add the predecessor to the descendant queue.
-			if err != nil {
-				log.Error("Error adding descendant.\n")
-				return
+			// If there are no substitute successors, but if there is a predecessor,
+			//add the predecessor to the descendant queue.
+			if pred != nil {
+				err := node.descendents.PushBack(pred) // Add the predecessor to the descendant queue.
+				if err != nil {
+					log.Error("Error adding descendant.\n")
+					return
+				}
 			}
 		}
+	} else {
+		log.Debug("Successor alive.\n")
 	}
 }
 
