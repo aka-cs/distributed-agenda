@@ -231,7 +231,9 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	return suc, nil
 }
 
-// LocateKey locate the node that stores key.
+// LocateKey locate the node that stores a given key.
+// To locate it, hash the given key to obtain the corresponding ID. Then look for the immediate
+// successor of this ID in the ring, since this is the node to which the key corresponds.
 func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	log.Info("Locating key.\n")
 
@@ -242,8 +244,7 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 		return nil, errors.New(err.Error() + message)
 	}
 
-	// Find and return the successor of this ID.
-	suc, err := node.FindIDSuccessor(id)
+	suc, err := node.FindIDSuccessor(id) // Find and return the successor of this ID.
 	if err != nil {
 		message := "Error locating key.\n"
 		log.Error(message)
