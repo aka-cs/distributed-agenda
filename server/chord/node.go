@@ -194,6 +194,8 @@ func (node *Node) Join(knownNode *chord.Node) error {
 }
 
 // FindIDSuccessor finds the node that succeeds ID.
+// To find it, the node with ID smaller than this ID and closer to this ID is searched,
+// using the finger table. Then, its successor is found and returned.
 func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	log.Debug("Finding ID successor.\n")
 
@@ -202,7 +204,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
 	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
 
-	// If the corresponding finger its itself, the key is stored in its successor.
+	// If the corresponding finger is itself, return this node successor.
 	if Equals(pred.ID, node.ID) {
 		// Lock the successor to read it, and unlock it after.
 		node.sucLock.RLock()
@@ -224,7 +226,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 		log.Error(err.Error() + message)
 		return nil, errors.New(err.Error() + message)
 	}
-	// Otherwise, return the correspondent ID successor.
+	// Return the obtained successor.
 	log.Debug("ID successor found.\n")
 	return suc, nil
 }
