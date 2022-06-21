@@ -410,10 +410,14 @@ func (node *Node) CheckSuccessor() {
 	// If successor is not null, check if it is alive.
 	if suc != nil {
 		err = node.RPC.Check(suc)
-		// If successor is not alive, set it to null.
+		// If successor is not alive, substitute the successor.
 		if err != nil {
+			// Lock the successor to write on it, and unlock it after.
+			node.sucLock.Lock()
+			node.successors.PopBeg()    // Remove the actual successor.
+			suc = node.successors.Beg() // Take the next successor in queue.
+			node.sucLock.Unlock()
 			log.Error(err.Error() + "Successor failed.\n")
-			suc = nil
 		} else {
 			// If successor is alive, return.
 			log.Debug("Successor alive.\n")
@@ -421,33 +425,19 @@ func (node *Node) CheckSuccessor() {
 		}
 	}
 
-	// Otherwise, substitute the successor.
-	// If the descendents queue is not empty, take a new successor from it.
-	node.descLock.Lock() // Lock the queue to read and write on it, and unlock it after.
-	if node.descendents.size > 0 {
-		log.Info("Substituting successor.\n")
-		suc, err = node.descendents.PopBeg() // Take the next successor.
-		if err != nil {
-			log.Error("Error obtaining new successor.\n")
-			suc = nil
-		}
-	} else if pred != nil {
-		log.Info("Substituting successor.\n")
-		// If there are no descendents, but if there is a predecessor, take the predecessor as successor.
-		suc = pred
-	}
-	node.descLock.Unlock()
-
-	// Otherwise, update the successor with the substitute.
-	// Lock the successor to write on it, and unlock it after.
-	node.sucLock.Lock()
-	node.successor = suc
-	node.sucLock.Unlock()
-
-	// If successor still null, there is nothing to do.
+	// If there are no successors, but if there is a predecessor, take the predecessor as successor.
 	if suc == nil {
-		log.Debug("There is no successor.\n")
-		return
+		if pred != nil {
+			// Lock the successor to write on it, and unlock it after.
+			node.sucLock.Lock()
+			node.successors.PushBeg(pred)
+			suc = node.successors.Beg() // Take the next successor in queue.
+			node.sucLock.Unlock()
+		} else {
+			// If successor still null, there is nothing to do.
+			log.Debug("There is no successor.\n")
+			return
+		}
 	}
 
 	// Otherwise, report that there is a new successor.
@@ -497,12 +487,12 @@ func (node *Node) PeriodicallyCheckSuccessor() {
 func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node] {
 	log.Debug("Fixing descendant entry.\n")
 
-	node.descLock.RLock()                     // Lock the queue to read it, and unlock it after.
-	queue := node.descendents                 // Obtain this node descendents queue.
+	node.sucLock.RLock()                      // Lock the queue to read it, and unlock it after.
+	queue := node.successors                  // Obtain this node descendents queue.
 	desc := qn.value                          // Obtain the descendant in this queue node.
 	last := qn == queue.last                  // Verify if this queue node is the last one.
 	fulfilled := queue.capacity == queue.size // Verify if the node descendents queue is fulfilled.
-	node.descLock.RUnlock()
+	node.sucLock.RUnlock()
 
 	// If this queue node is the last one, and the queue is fulfilled, return.
 	if last && fulfilled {
@@ -515,14 +505,10 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 		log.Error(err.Error() + "Error getting successor of descendant.\n" +
 			"Therefore is assumed dead and removed from descendents queue.\n")
 
-		node.descLock.Lock()   // Lock the queue to write on it, and unlock it after.
-		err = queue.Remove(qn) // Remove it from the descendents queue.
-		prev := qn.prev        // Obtain the previous node of this queue node.
-		node.descLock.Unlock()
-		if err != nil {
-			log.Error("Descendant could not be removed from queue.\n")
-			return nil
-		}
+		node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
+		queue.Remove(qn)    // Remove it from the descendents queue.
+		prev := qn.prev     // Obtain the previous node of this queue node.
+		node.sucLock.Unlock()
 		// Return the previous node of this queue node.
 		return prev
 	}
@@ -531,25 +517,20 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 	if !Equals(suc.ID, node.ID) {
 		// If this queue node is the last one.
 		if qn == queue.last {
-			node.descLock.Lock()      // Lock the queue to write on it, and unlock it after.
-			err = queue.PushBack(suc) // Push this descendant successor in the queue.
-			node.descLock.Unlock()
-			if err != nil {
-				log.Error("Error fixing descendant entry.\n" +
-					"Could not push descendant's successor to queue.\n")
-				return nil
-			}
+			node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
+			queue.PushBack(suc) // Push this descendant successor in the queue.
+			node.sucLock.Unlock()
 		} else {
 			// Otherwise, fix next node of this queue node.
-			node.descLock.Lock() // Lock the queue to write on it, and unlock it after.
-			qn.next.value = suc  // Set this descendant's successor as value of the next node of this queue node.
-			node.descLock.Unlock()
+			node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
+			qn.next.value = suc // Set this descendant's successor as value of the next node of this queue node.
+			node.sucLock.Unlock()
 		}
 	}
 
-	node.descLock.RLock() // Lock the queue to read it, and unlock it after.
-	next := qn.next       // Obtain the next node of this queue node.
-	node.descLock.RUnlock()
+	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
+	next := qn.next      // Obtain the next node of this queue node.
+	node.sucLock.RUnlock()
 	// Return the next node of this queue node.
 	return next
 }
@@ -566,10 +547,8 @@ func (node *Node) PeriodicallyFixDescendant() {
 		case <-ticker.C:
 			// If it's time, fix an entry of the descendents queue.
 			// If actual descendant entry is null, fix the first.
-			if qn == nil {
-
-				suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this descendant.
-				suc = node.descendents.first
+			if qn == nil && node.successors.size > 0 {
+				qn = node.successors.first
 			}
 			// If actual descendant entry is not null,
 			if qn != nil {
