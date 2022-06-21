@@ -14,13 +14,10 @@ import (
 type Node struct {
 	*chord.Node // Real Node.
 
-	predecessor *chord.Node  // Predecessor of this node in the ring.
-	predLock    sync.RWMutex // Locks the predecessor for reading or writing.
-	successor   *chord.Node  // Successor of this node in the ring.
-	sucLock     sync.RWMutex // Locks the successor for reading or writing.
-
-	descendents *Queue[chord.Node] // Queue of descendents of this node.
-	descLock    sync.RWMutex       // Locks the descendents queue for reading or writing.
+	predecessor *chord.Node        // Predecessor of this node in the ring.
+	predLock    sync.RWMutex       // Locks the predecessor for reading or writing.
+	successors  *Queue[chord.Node] // Successors of this node in the ring.
+	sucLock     sync.RWMutex       // Locks the successor for reading or writing.
 
 	fingerTable FingerTable  // FingerTable of this node.
 	fingerLock  sync.RWMutex // Locks the finger table for reading or writing.
@@ -53,8 +50,7 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 	// Instantiates the node.
 	node := &Node{Node: &innerNode,
 		predecessor: nil,
-		successor:   nil,
-		descendents: NewQueue[chord.Node](configuration.StabilizingNodes),
+		successors:  NewQueue[chord.Node](configuration.StabilizingNodes),
 		fingerTable: NewFingerTable(&innerNode, configuration.HashSize),
 		RPC:         transport,
 		config:      configuration,
@@ -100,7 +96,7 @@ func (node *Node) Stop() error {
 	// Change successor predecessor to our predecessor, and vice-versa.
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
-	suc := node.successor
+	suc := node.successors.Beg()
 	node.sucLock.RUnlock()
 
 	// Lock the predecessor to read it, and unlock it after.
@@ -178,7 +174,10 @@ func (node *Node) Join(knownNode *chord.Node) error {
 
 	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
-	node.successor = suc // Update this node successor with the obtained node.
+	if node.successors.Fulfilled() {
+		node.successors.PopBack()
+	}
+	node.successors.PushBeg(suc) // Update this node successor with the obtained node.
 	node.sucLock.Unlock()
 	log.Info("Successful join of the node.\n")
 	return nil
@@ -199,7 +198,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	if Equals(pred.ID, node.ID) {
 		// Lock the successor to read it, and unlock it after.
 		node.sucLock.RLock()
-		suc := node.successor
+		suc := node.successors.Beg()
 		node.sucLock.RUnlock()
 
 		// If the successor is null, return this node.
@@ -257,7 +256,7 @@ func (node *Node) Stabilize() {
 
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
-	suc := node.successor
+	suc := node.successors.Beg()
 	node.sucLock.RUnlock()
 
 	// If successor is null, there is no way to stabilize (and sure nothing to stabilize).
@@ -277,7 +276,10 @@ func (node *Node) Stabilize() {
 	if candidate != nil && Between(candidate.ID, node.ID, suc.ID, false, false) {
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
-		node.successor = candidate
+		if node.successors.Fulfilled() {
+			node.successors.PopBack()
+		}
+		node.successors.PushBeg(candidate)
 		node.sucLock.Unlock()
 	}
 
@@ -334,7 +336,7 @@ func (node *Node) CheckPredecessor() {
 
 			// Lock the successor to read it, and unlock it after.
 			node.sucLock.RLock()
-			suc := node.successor
+			suc := node.successors.Beg()
 			node.sucLock.RUnlock()
 
 			// If successor exists, transfer the old predecessor keys to it, to maintain replication.
@@ -395,7 +397,7 @@ func (node *Node) CheckSuccessor() {
 
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
-	suc := node.successor
+	suc := node.successors.Beg()
 	node.sucLock.RUnlock()
 
 	// Lock the predecessor to read it, and unlock it after.
@@ -510,12 +512,15 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 	suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this descendant.
 	// If there is an error, then assume this descendant node is dead.
 	if err != nil {
+		log.Error(err.Error() + "Error getting successor of descendant.\n" +
+			"Therefore is assumed dead and removed from descendents queue.\n")
+
 		node.descLock.Lock()   // Lock the queue to write on it, and unlock it after.
 		err = queue.Remove(qn) // Remove it from the descendents queue.
 		prev := qn.prev        // Obtain the previous node of this queue node.
 		node.descLock.Unlock()
 		if err != nil {
-			log.Error("Error fixing descendant entry: actual one is dead and could not be removed from queue.\n")
+			log.Error("Descendant could not be removed from queue.\n")
 			return nil
 		}
 		// Return the previous node of this queue node.
@@ -530,13 +535,14 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 			err = queue.PushBack(suc) // Push this descendant successor in the queue.
 			node.descLock.Unlock()
 			if err != nil {
-				log.Error("Error fixing descendant entry: cannot push this descendant successor to queue.\n")
+				log.Error("Error fixing descendant entry.\n" +
+					"Could not push descendant's successor to queue.\n")
 				return nil
 			}
 		} else {
-			// Otherwise, fix the next node of this queue node.
+			// Otherwise, fix next node of this queue node.
 			node.descLock.Lock() // Lock the queue to write on it, and unlock it after.
-			qn.next.value = suc  // Set this descendant successor as value of the next node of this queue node.
+			qn.next.value = suc  // Set this descendant's successor as value of the next node of this queue node.
 			node.descLock.Unlock()
 		}
 	}
@@ -553,16 +559,21 @@ func (node *Node) PeriodicallyFixDescendant() {
 	log.Debug("Fix descendant thread started.\n")
 
 	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
-	var suc *QueueNode[chord.Node] = nil
+	var qn *QueueNode[chord.Node] = nil
 
 	for {
 		select {
 		case <-ticker.C:
-			if suc == nil && node.descendents.size > 0 {
+			// If it's time, fix an entry of the descendents queue.
+			// If actual descendant entry is null, fix the first.
+			if qn == nil {
+
+				suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this descendant.
 				suc = node.descendents.first
 			}
-			if suc != nil {
-				suc = node.FixDescendant(suc)
+			// If actual descendant entry is not null,
+			if qn != nil {
+				qn = node.FixDescendant(qn)
 			}
 		case <-node.shutdown:
 			ticker.Stop()
@@ -593,7 +604,7 @@ func (node *Node) GetPredecessor(ctx context.Context, req *chord.EmptyRequest) (
 func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*chord.Node, error) {
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
-	suc := node.successor
+	suc := node.successors.Beg()
 	node.sucLock.RUnlock()
 
 	// If successor is null, return a null node.
@@ -628,7 +639,10 @@ func (node *Node) SetSuccessor(ctx context.Context, suc *chord.Node) (*chord.Emp
 
 	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
-	node.successor = suc
+	if node.successors.Fulfilled() {
+		node.successors.PopBack()
+	}
+	node.successors.PushBeg(suc)
 	node.sucLock.Unlock()
 	return emptyResponse, nil
 }
@@ -661,7 +675,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 
 		// Lock the successor to read it, and unlock it at the end of function.
 		node.sucLock.RLock()
-		suc := node.successor
+		suc := node.successors.Beg()
 		node.sucLock.RUnlock()
 
 		// Delete the keys to transfer from successor storage replication.
@@ -774,7 +788,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		node.dictLock.Unlock()
 
 		node.sucLock.RLock() // Lock the successor to read it, and unlock it after.
-		suc := node.successor
+		suc := node.successors.Beg()
 		node.sucLock.RUnlock()
 
 		// If successor is not null, replicate the request to it.
@@ -825,7 +839,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 		node.dictLock.Unlock()
 
 		node.sucLock.RLock() // Lock the successor to read it, and unlock it after.
-		suc := node.successor
+		suc := node.successors.Beg()
 		node.sucLock.RUnlock()
 
 		// If successor is not null, replicate the request to it.
