@@ -18,7 +18,7 @@ func NewQueue[T any](capacity int) *Queue[T] {
 }
 
 func (queue *Queue[T]) PushBeg(value *T) {
-	if queue.size == queue.capacity {
+	if queue.size == queue.capacity || value == nil {
 		return
 	}
 
@@ -55,7 +55,7 @@ func (queue *Queue[T]) PopBeg() *T {
 }
 
 func (queue *Queue[T]) PushBack(value *T) {
-	if queue.size == queue.capacity {
+	if queue.size == queue.capacity || value == nil {
 		return
 	}
 
