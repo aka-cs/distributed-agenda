@@ -871,16 +871,9 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 	// If the get request is null, report error.
 	if req == nil {
-		message := "Get request cannot be null.\n"
+		message := "Set request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
-	}
-
-	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		message := "Error getting key.\n"
-		log.Error(message)
-		return nil, errors.New(err.Error() + message)
 	}
 
 	// If this request is a replica, resolve it local.
@@ -889,6 +882,14 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
 		return emptyResponse, nil
+	}
+
+	// Otherwise, proceed normally.
+	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		message := "Error setting key.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
 	}
 
 	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
@@ -933,6 +934,15 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 // Delete a <key, value> pair from storage.
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
+	log.Debug("Deleting a <key, value> pair.\n")
+
+	// If the get request is null, report error.
+	if req == nil {
+		message := "Delete request cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
 	// If this request is a replica, resolve it local.
 	if req.Replica {
 		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
@@ -944,19 +954,24 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	// Otherwise, proceed normally.
 	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
 	if err != nil {
-		return nil, err
+		message := "Error deleting key.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
 	}
 
-	keyNode := node.Node  // By default, delete the key from the local storage.
+	keyNode := node.Node  // By default, take this node to delete the <key, value> pair from the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If the requested key is not necessarily local.
+	// If the key ID is not between this predecessor node ID and this node ID,
+	// then the requested key is not necessarily local.
 	if pred == nil || Between(keyID, pred.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
-			return nil, err
+			message := "Error deleting key.\n"
+			log.Error(message)
+			return nil, errors.New(err.Error() + message)
 		}
 	}
 
