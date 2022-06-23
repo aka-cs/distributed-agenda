@@ -738,50 +738,62 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 
 // Notify this node that it possibly have a new predecessor.
 func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResponse, error) {
-	// Lock the predecessor to read it, and unlock it at the end of function.
+	log.Debug("Checking predecessor notification.\n")
+
+	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If the predecessor candidate is closer to this node than its current predecessor, update this node
-	// predecessor with the candidate.
+	// If this node has no predecessor or the predecessor candidate is closer to this node
+	// than its current predecessor, update this node predecessor with the candidate.
 	if pred == nil || Between(new.ID, pred.ID, node.ID, false, false) {
-		// Lock the predecessor to write on it, and unlock it at the end of function.
+		log.Debug("Updating predecessor.\n")
+
+		// Lock the predecessor to write on it, and unlock it after.
 		node.predLock.Lock()
 		node.predecessor = new
 		node.predLock.Unlock()
 
-		// Lock the successor to read it, and unlock it at the end of function.
+		// Lock the successor to read it, and unlock it after.
 		node.sucLock.RLock()
 		suc := node.successors.Beg()
 		node.sucLock.RUnlock()
 
-		// Delete the keys to transfer from successor storage replication.
-		err := node.RPC.Detach(suc, &chord.DetachRequest{L: nil, R: new.ID})
-		if err != nil {
-			return nil, err
-		}
-
+		// Transfer to the new predecessor its corresponding keys.
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
 		dictionary, err := node.dictionary.Segment(nil, new.ID) // Obtain the keys to transfer.
 		node.dictLock.RUnlock()
 		if err != nil {
-			return nil, err
+			message := "Error obtaining the new predecessor its corresponding keys.\n"
+			return nil, errors.New(err.Error() + message)
 		}
 
-		// Build the new predecessor dictionary, by transferring the correspondent keys.
+		// Build the new predecessor dictionary, by transferring its correspondent keys.
 		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
-			return nil, err
+			message := "Error transferring keys to the new predecessor.\n"
+			return nil, errors.New(err.Error() + message)
 		}
 
-		// Lock the dictionary to write on it, and unlock it after.
-		node.dictLock.Lock()
-		err = node.dictionary.Detach(nil, pred.ID) // Delete the keys of the old predecessor.
-		node.dictLock.Unlock()
+		// Delete the transferred keys from successor storage replication.
+		err = node.RPC.Detach(suc, &chord.DetachRequest{L: nil, R: new.ID})
 		if err != nil {
-			return nil, err
+			message := "Error deleting replicated keys on the successor.\n"
+			return nil, errors.New(err.Error() + message)
+		}
+
+		// If the old predecessor is not null, delete the old predecessor keys from this node.
+		if pred != nil {
+			// Lock the dictionary to write on it, and unlock it after.
+			node.dictLock.Lock()
+			err = node.dictionary.Detach(nil, pred.ID) // Delete the keys of the old predecessor.
+			node.dictLock.Unlock()
+			if err != nil {
+				message := "Error deleting old predecessor keys on this node.\n"
+				return nil, errors.New(err.Error() + message)
+			}
 		}
 	}
 
