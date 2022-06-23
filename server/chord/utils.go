@@ -15,6 +15,18 @@ var (
 	emptyResponse = &chord.EmptyResponse{}
 )
 
+func IsOpen[T any](channel <-chan T) bool {
+	select {
+	case <-channel:
+		return false
+	default:
+		if channel == nil {
+			return false
+		}
+		return true
+	}
+}
+
 // FingerID computes the offset by (n + 2^i) mod (2^m)
 func FingerID(n []byte, i int, m int) []byte {
 	// Convert the ID to a bigint

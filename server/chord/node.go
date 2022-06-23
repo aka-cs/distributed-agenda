@@ -12,12 +12,12 @@ import (
 
 // Node represent a Chord ring single node.
 type Node struct {
-	*chord.Node // Real Node.
+	*chord.Node // Real node.
 
 	predecessor *chord.Node        // Predecessor of this node in the ring.
 	predLock    sync.RWMutex       // Locks the predecessor for reading or writing.
-	successors  *Queue[chord.Node] // Successors of this node in the ring.
-	sucLock     sync.RWMutex       // Locks the successor for reading or writing.
+	successors  *Queue[chord.Node] // Queue of successors of this node in the ring.
+	sucLock     sync.RWMutex       // Locks the queue of successors for reading or writing.
 
 	fingerTable FingerTable  // FingerTable of this node.
 	fingerLock  sync.RWMutex // Locks the finger table for reading or writing.
@@ -25,7 +25,7 @@ type Node struct {
 	RPC    RemoteServices // Transport layer of this node.
 	config *Configuration // General configurations.
 
-	dictionary Storage      // Storage of <key, value> pairs of this node.
+	dictionary Storage      // Storage dictionary of this node.
 	dictLock   sync.RWMutex // Locks the dictionary for reading or writing.
 
 	server   *grpc.Server  // Node server.
@@ -38,24 +38,26 @@ type Node struct {
 func NewNode(address string, configuration *Configuration) (*Node, error) {
 	id, err := HashKey(address, configuration.Hash) // Obtain the ID relative to this address.
 	if err != nil {
-		return nil, err
+		message := "Error creating node.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
 	}
 
 	// Creates the new node with the obtained ID and same address.
 	innerNode := chord.Node{ID: id, Address: address}
 
-	transport := NewGRPCServices(configuration)           // Creates the transport layer.
-	server := grpc.NewServer(configuration.ServerOpts...) // Creates the node server.
+	transport := NewGRPCServices(configuration) // Creates the transport layer.
 
 	// Instantiates the node.
 	node := &Node{Node: &innerNode,
 		predecessor: nil,
-		successors:  NewQueue[chord.Node](configuration.StabilizingNodes),
-		fingerTable: NewFingerTable(&innerNode, configuration.HashSize),
+		successors:  nil,
+		fingerTable: nil,
 		RPC:         transport,
 		config:      configuration,
-		dictionary:  NewDictionary(configuration.Hash),
-		server:      server}
+		dictionary:  nil,
+		server:      nil,
+		shutdown:    nil}
 
 	// Return the node.
 	return node, nil
@@ -63,13 +65,25 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 
 // Node server internal methods.
 
-// Start the node server, by registering the server field of this node as a chord server, starting
+// Start the node server, by registering the server of this node as a chord server, starting
 // the transport layer services and the periodically threads that stabilizes the server.
 func (node *Node) Start() error {
+	// If node server is actually running, report error.
+	if IsOpen(node.shutdown) {
+		message := "Error starting server: this node server is actually running.\n"
+		log.Error(message)
+		return errors.New(message)
+	}
+
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 	log.Info("Starting server...\n")
 
-	chord.RegisterChordServer(node.server, node) // Register the node server.
+	node.successors = NewQueue[chord.Node](node.config.StabilizingNodes) // Create the successors queue.
+	node.fingerTable = NewFingerTable(node.Node, node.config.HashSize)   // Create the finger table.
+	node.dictionary = NewDictionary(node.config.Hash)                    // Create the node dictionary.
+	node.server = grpc.NewServer(node.config.ServerOpts...)              // Create the node server.
+
+	chord.RegisterChordServer(node.server, node) // Register the node server as a chord server.
 	log.Info("Chord services registered.\n")
 
 	node.RPC.Start() // Start the RPC (transport layer) services.
@@ -85,15 +99,14 @@ func (node *Node) Start() error {
 	return nil
 }
 
-// Stop the node server, by reporting the node services are now shutdown, to make the periodic
-// threads stop themselves eventually, and stopping the transport layer services.
-// In addition, before stopping, the node sends to its successor the keys of its predecessor,
-// to maintain replication.
+// Stop the node server, by stopping the transport layer services and reporting the node
+// services are now shutdown, to make the periodic threads stop themselves eventually.
 // Then he connects them directly, thus leaving the ring.
+// It is not necessary to deal with the transfer of keys for the maintenance of replication,
+// since the methods used to connect the nodes (SetSuccessor and SetPredecessor) will take care of this.
 func (node *Node) Stop() error {
 	log.Info("Closing server...\n")
 
-	// Change successor predecessor to our predecessor, and vice-versa.
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successors.Beg()
@@ -104,25 +117,30 @@ func (node *Node) Stop() error {
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
+	// Change successor's predecessor to our predecessor.
 	if suc != nil {
-		err := node.RPC.SetPredecessor(suc, pred) // Then, set the predecessor as a direct predecessor of successor.
+		err := node.RPC.SetPredecessor(suc, pred)
 		if err != nil {
-			message := "Error setting new predecessor.\nError stopping server.\n"
+			message := "Error setting successor's new predecessor.\nError stopping server.\n"
 			log.Error(message)
 			return errors.New(err.Error() + message)
 		}
 	}
 
-	// If successor and predecessor are not null, and are not the same node, connect them.
+	// Change predecessor's successor to our successor.
 	if pred != nil {
-		err := node.RPC.SetSuccessor(pred, suc) // Then, set the successor as a direct successor of predecessor.
+		err := node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
-			message := "Error setting new successor.\nError stopping server.\n"
+			message := "Error setting predecessor's new successor.\nError stopping server.\n"
 			log.Error(message)
 			return errors.New(err.Error() + message)
 		}
-
 	}
+
+	node.successors = nil  // Delete the successors queue.
+	node.fingerTable = nil // Delete the finger table.
+	node.dictionary = nil  // Delete the node dictionary.
+	node.server = nil      // Delete the node server.
 
 	node.RPC.Stop()      // Stop the RPC (transport layer) services.
 	close(node.shutdown) // Report the node server is shutdown.
