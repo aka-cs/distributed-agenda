@@ -261,11 +261,12 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 
 // Stabilize this node.
 // To stabilize the node, the predecessor of the successor of this node is searched for.
-// If the obtained node is not this node, and it is closer to this node than its current successor,
-// then update it taking the obtained node as the new successor.
+// If the obtained node is not this node, and it's closer to this node than its current successor,
+// then update this node taking the obtained node as the new successor.
 // Finally, notifies its new successor of this node existence, so that the successor will update itself.
-// TODO: Notify will also transfer keys to this node (but maybe the list of keys will be empty).
-// TODO: Think about this problem later.
+// The transfer of keys from this node to its successor to maintain replication is not necessary, since
+// the new successor at some point was a predecessor of the old successor, and received from it
+// the replicated keys of this node.
 func (node *Node) Stabilize() {
 	log.Debug("Stabilizing node.\n")
 
@@ -281,7 +282,6 @@ func (node *Node) Stabilize() {
 	}
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
-	// In case of error or null response, report error.
 	if err != nil {
 		log.Error(err.Error() + "Error stabilizing node.\n")
 	}
@@ -291,15 +291,15 @@ func (node *Node) Stabilize() {
 	if candidate != nil && Between(candidate.ID, node.ID, suc.ID, false, false) {
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
+		// If queue is fulfilled, pop the last element, to gain queue space for the new successor.
 		if node.successors.Fulfilled() {
 			node.successors.PopBack()
 		}
-		node.successors.PushBeg(candidate)
+		node.successors.PushBeg(candidate) // Update this node successor with the obtained node.
 		node.sucLock.Unlock()
 	}
 
-	// Notify successor about the existence of its predecessor.
-	err = node.RPC.Notify(suc, node.Node)
+	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
 	if err != nil {
 		log.Error(err.Error() + "Error stabilizing node.\n")
 		return
@@ -317,7 +317,7 @@ func (node *Node) PeriodicallyStabilize() {
 		case <-ticker.C:
 			node.Stabilize() // If it's time, stabilize the node.
 		case <-node.shutdown:
-			ticker.Stop()
+			ticker.Stop() // If node server is shutdown, stop the thread.
 			return
 		}
 	}
