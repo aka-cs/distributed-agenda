@@ -399,12 +399,12 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 }
 
 // CheckSuccessor checks whether successor has failed.
-// To do this, make a remote call to Check from the successor. If the call fails, the successor
-// is assumed dead, and it is necessary to replace it.
-// To replace it, check that the queue of descendents is not empty and, in this case,
-// the first of them is taken as the new successor.
-// As a special case, if the descendants queue is empty, but this node has a predecessor,
-// then the predecessor is taken as the new successor.
+// To do this, make a remote Check call to the successor. If the call fails, the successor
+// is assumed dead, and it's removed from the queue of successors.
+// Then, it's necessary to replace it. For this, verify that the queue of successors is not empty now and,
+// in this case, the first element on it is taken as the new successor.
+// As a special case, if the queue of successors is empty, but this node has a predecessor,
+// then the predecessor is taken as the new successor (to allow chord rings of size two).
 // It is necessary to transfer the keys of this node to its new successor, because this new successor
 // only has its own keys and those that corresponded to the old successor.
 func (node *Node) CheckSuccessor() {
@@ -420,11 +420,9 @@ func (node *Node) CheckSuccessor() {
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	var err error
-
 	// If successor is not null, check if it is alive.
 	if suc != nil {
-		err = node.RPC.Check(suc)
+		err := node.RPC.Check(suc)
 		// If successor is not alive, substitute the successor.
 		if err != nil {
 			// Lock the successor to write on it, and unlock it after.
