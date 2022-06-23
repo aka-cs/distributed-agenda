@@ -615,12 +615,7 @@ func (node *Node) GetPredecessor(ctx context.Context, req *chord.EmptyRequest) (
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If predecessor is null, return a null node.
-	if pred == nil {
-		return nullNode, nil
-	}
-
-	// Otherwise, return the predecessor of this node.
+	// Return the predecessor of this node.
 	return pred, nil
 }
 
@@ -631,12 +626,7 @@ func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*c
 	suc := node.successors.Beg()
 	node.sucLock.RUnlock()
 
-	// If successor is null, return a null node.
-	if suc == nil {
-		return nullNode, nil
-	}
-
-	// Otherwise, return the successor of this node.
+	// Return the successor of this node.
 	return suc, nil
 }
 
