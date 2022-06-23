@@ -610,6 +610,8 @@ func (node *Node) PeriodicallyFixDescendant() {
 
 // GetPredecessor returns the node believed to be the current predecessor.
 func (node *Node) GetPredecessor(ctx context.Context, req *chord.EmptyRequest) (*chord.Node, error) {
+	log.Debug("Getting node predecessor.\n")
+
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
@@ -621,6 +623,8 @@ func (node *Node) GetPredecessor(ctx context.Context, req *chord.EmptyRequest) (
 
 // GetSuccessor returns the node believed to be the current successor.
 func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*chord.Node, error) {
+	log.Debug("Getting node successor.\n")
+
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
 	suc := node.successors.Beg()
@@ -632,6 +636,8 @@ func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*c
 
 // SetPredecessor sets the predecessor of this node.
 func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
+	log.Debug("Setting node predecessor.\n")
+
 	// If the predecessor to set is this node, set predecessor to null.
 	if candidate != nil && Equals(candidate.ID, node.ID) {
 		candidate = nil
@@ -674,59 +680,59 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 
 // SetSuccessor sets predecessor for this node.
 func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
+	log.Debug("Setting node successor.\n")
+
 	// If the successor to set is this node, set successor to null.
 	if candidate != nil && Equals(candidate.ID, node.ID) {
 		candidate = nil
 	}
 
-	// Lock the predecessor to read it, and unlock it after.
-	node.predLock.RLock()
-	pred := node.predecessor
-	node.predLock.RUnlock()
+	// If the new successor is not null, update this node successor.
+	if candidate != nil {
+		// Lock the predecessor to read it, and unlock it after.
+		node.predLock.RLock()
+		pred := node.predecessor
+		node.predLock.RUnlock()
 
-	// Lock the successor to write on it, and unlock it after.
-	node.sucLock.Lock()
-	// If queue is fulfilled, pop the last element, to gain queue space for the new successor.
-	if node.successors.Fulfilled() {
-		node.successors.PopBack()
-	}
-	node.successors.PushBeg(candidate)
-	node.sucLock.Unlock()
+		// Lock the successor to write on it, and unlock it after.
+		node.sucLock.Lock()
+		// If queue is fulfilled, pop the last element, to gain queue space for the new successor.
+		if node.successors.Fulfilled() {
+			node.successors.PopBack()
+		}
+		node.successors.PushBeg(candidate)
+		node.sucLock.Unlock()
 
-	// Transfer this node keys to the new successor.
-	var predID []byte = nil // Obtain this node predecessor ID.
-	if pred != nil {
-		predID = pred.ID
-	}
+		// Transfer this node keys to the new successor.
+		var predID []byte = nil // Obtain this node predecessor ID.
+		if pred != nil {
+			predID = pred.ID
+		}
 
-	// Lock the dictionary to read it, and unlock it after.
-	node.dictLock.RLock()
-	dictionary, err := node.dictionary.Segment(predID, nil) // Obtain this node keys.
-	node.dictLock.RUnlock()
-	if err != nil {
-		log.Error("Error obtaining this node keys.\n")
-		return emptyResponse, nil
-	}
+		// Lock the dictionary to read it, and unlock it after.
+		node.dictLock.RLock()
+		dictionary, err := node.dictionary.Segment(predID, nil) // Obtain this node keys.
+		node.dictLock.RUnlock()
+		if err != nil {
+			log.Error("Error obtaining this node keys.\n")
+			return emptyResponse, nil
+		}
 
-	// Transfer this node keys to the new successor, to update it.
-	err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
-	if err != nil {
-		log.Error(err.Error() + "Error transferring keys to the new successor.\n")
-		return emptyResponse, nil
+		// Transfer this node keys to the new successor, to update it.
+		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
+		if err != nil {
+			log.Error(err.Error() + "Error transferring keys to the new successor.\n")
+			return emptyResponse, nil
+		}
+		log.Info("Successful transfer of keys to the new successor.\n")
 	}
-	log.Info("Successful transfer of keys to the new successor.\n")
 
 	return emptyResponse, nil
 }
 
 // FindSuccessor finds the node that succeeds ID.
 func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node, error) {
-	// If the ID is null, return error.
-	if id == nil {
-		return nil, errors.New("Invalid argument: id cannot be null.\n")
-	}
-
-	// Otherwise, find the successor of this ID.
+	// Find the successor of this ID.
 	return node.FindIDSuccessor(id.ID)
 }
 
