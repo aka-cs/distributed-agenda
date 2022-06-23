@@ -101,10 +101,17 @@ func (node *Node) Start() error {
 
 // Stop the node server, by stopping the transport layer services and reporting the node
 // services are now shutdown, to make the periodic threads stop themselves eventually.
-// Then he connects them directly, thus leaving the ring.
+// Then, connects this node successor and predecessor directly, thus leaving the ring.
 // It is not necessary to deal with the transfer of keys for the maintenance of replication,
 // since the methods used to connect the nodes (SetSuccessor and SetPredecessor) will take care of this.
 func (node *Node) Stop() error {
+	// If node server is not actually running, report error.
+	if !IsOpen(node.shutdown) {
+		message := "Error stopping server: this node server is actually shutdown.\n"
+		log.Error(message)
+		return errors.New(message)
+	}
+
 	log.Info("Closing server...\n")
 
 	// Lock the successor to read it, and unlock it after.
@@ -117,21 +124,21 @@ func (node *Node) Stop() error {
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// Change successor's predecessor to our predecessor.
+	// Change the predecessor of this node successor to this node predecessor.
 	if suc != nil {
 		err := node.RPC.SetPredecessor(suc, pred)
 		if err != nil {
-			message := "Error setting successor's new predecessor.\nError stopping server.\n"
+			message := "Error setting new predecessor of this node successor.\nError stopping server.\n"
 			log.Error(message)
 			return errors.New(err.Error() + message)
 		}
 	}
 
-	// Change predecessor's successor to our successor.
+	// Change the successor of this node predecessor to this node successor.
 	if pred != nil {
 		err := node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
-			message := "Error setting predecessor's new successor.\nError stopping server.\n"
+			message := "Error setting new successor of this node predecessor.\nError stopping server.\n"
 			log.Error(message)
 			return errors.New(err.Error() + message)
 		}
