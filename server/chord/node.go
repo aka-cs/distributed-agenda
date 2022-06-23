@@ -359,7 +359,7 @@ func (node *Node) CheckPredecessor() {
 				log.Info("Absorbing predecessor's keys.\n")
 				// Lock the dictionary to read it, and unlock it after.
 				node.dictLock.RLock()
-				dictionary, err := node.dictionary.Segment(nil, pred.ID)
+				dictionary, err := node.dictionary.Segment(nil, pred.ID) // Obtain the predecessor keys.
 				node.dictLock.RUnlock()
 				if err != nil {
 					log.Error("Error obtaining predecessor keys.\n")
@@ -392,7 +392,7 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 		case <-ticker.C:
 			node.CheckPredecessor() // If it's time, check if this node predecessor it's alive.
 		case <-node.shutdown:
-			ticker.Stop()
+			ticker.Stop() // If node server is shutdown, stop the thread.
 			return
 		}
 	}
