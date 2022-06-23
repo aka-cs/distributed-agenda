@@ -740,6 +740,13 @@ func (node *Node) FindSuccessor(ctx context.Context, id *chord.ID) (*chord.Node,
 func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResponse, error) {
 	log.Debug("Checking predecessor notification.\n")
 
+	// If candidate for new predecessor is null, report error.
+	if new == nil {
+		message := "Candidate for new predecessor cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
@@ -809,33 +816,49 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
-	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		return nil, err
+	log.Debug("Getting key associated value.\n")
+
+	// If the get request is null, report error.
+	if req == nil {
+		message := "Get request cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
 	}
 
-	keyNode := node.Node  // By default, find the key in the local storage.
+	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		message := "Error getting key.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
+	}
+
+	keyNode := node.Node  // By default, take this node to find the key in the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If the requested key is not necessarily local.
+	// If the key ID is not between this predecessor node ID and this node ID,
+	// then the requested key is not necessarily local.
 	if pred == nil || Between(keyID, pred.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
-			return nil, err
+			message := "Error getting key.\n"
+			log.Error(message)
+			return nil, errors.New(err.Error() + message)
 		}
 	}
 
 	// If the node that stores the key is this node, directly get the associated value from this node storage.
 	if Equals(keyNode.ID, node.ID) {
 		node.dictLock.RLock()                      // Lock the dictionary to read it, and unlock it after.
-		value, err := node.dictionary.Get(req.Key) // Get the key value from storage.
+		value, err := node.dictionary.Get(req.Key) // Get the value associated to this key from storage.
 		node.dictLock.RUnlock()
 		if err != nil {
-			return nil, err
+			message := "Error getting key.\n"
+			log.Error(message)
+			return nil, errors.New(err.Error() + message)
 		}
-		// Return the key value.
+		// Return the value associated to this key.
 		return &chord.GetResponse{Value: value}, nil
 	}
 	// Otherwise, return the result of the remote call on the correspondent node.
@@ -844,6 +867,22 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
+	log.Debug("Setting a <key, value> pair.\n")
+
+	// If the get request is null, report error.
+	if req == nil {
+		message := "Get request cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
+	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		message := "Error getting key.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
+	}
+
 	// If this request is a replica, resolve it local.
 	if req.Replica {
 		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
@@ -852,22 +891,21 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		return emptyResponse, nil
 	}
 
-	// Otherwise, proceed normally.
-	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		return nil, err
-	}
-
-	keyNode := node.Node  // By default, set the <key, value> pair on the local storage.
+	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If the requested key is not necessarily local.
+	// If the key ID is not between this predecessor node ID and this node ID,
+	// then the requested key is not necessarily local.
 	if pred == nil || Between(keyID, pred.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node to which that key corresponds.
 		if err != nil {
-			return nil, err
+			if err != nil {
+				message := "Error setting key.\n"
+				log.Error(message)
+				return nil, errors.New(err.Error() + message)
+			}
 		}
 	}
 
