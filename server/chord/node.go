@@ -999,6 +999,15 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 // Extend set a list of <key, values> pairs on the storage dictionary.
 func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.EmptyResponse, error) {
+	log.Debug("Extending local storage dictionary.\n")
+
+	// If the get request is null, report error.
+	if req == nil {
+		message := "Extend request cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
 	// If there are no keys, return.
 	if req.Dictionary == nil || len(req.Dictionary) == 0 {
 		return emptyResponse, nil
@@ -1008,18 +1017,31 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	err := node.dictionary.Extend(req.Dictionary) // Set the <key, value> pairs on the storage.
 	node.dictLock.Unlock()
 	if err != nil {
-		return nil, err
+		message := "Error extending storage dictionary.\n"
+		log.Error(err.Error() + message)
+		return nil, errors.New(err.Error() + message)
 	}
 	return emptyResponse, err
 }
 
 // Detach deletes all <key, values> pairs in a given interval storage.
 func (node *Node) Detach(ctx context.Context, req *chord.DetachRequest) (*chord.EmptyResponse, error) {
+	log.Debug("Detaching an interval of keys from local storage dictionary.\n")
+
+	// If the get request is null, report error.
+	if req == nil {
+		message := "Detach request cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
 	node.dictLock.Lock()                        // Lock the dictionary to write on it, and unlock it after.
 	err := node.dictionary.Detach(req.L, req.R) // Set the <key, value> pairs on the storage.
 	node.dictLock.Unlock()
 	if err != nil {
-		return nil, err
+		message := "Error detaching interval of keys from storage dictionary.\n"
+		log.Error(err.Error() + message)
+		return nil, errors.New(err.Error() + message)
 	}
 	return emptyResponse, err
 }
