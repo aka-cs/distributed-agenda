@@ -197,17 +197,17 @@ func (node *Node) Join(knownNode *chord.Node) error {
 }
 
 // FindIDSuccessor finds the node that succeeds ID.
-// To find it, the node with ID smaller than this ID and closer to this ID is searched,
+// To find it, the node with ID smaller than this ID and closest to this ID is searched,
 // using the finger table. Then, its successor is found and returned.
 func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	log.Debug("Finding ID successor.\n")
 
-	// Look on the FingerTable to found the closest finger with ID lower or equal than this ID.
-	node.fingerLock.RLock()        // Lock the FingerTable to read from it.
+	// Look on the FingerTable to found the closest finger with ID lower than this ID.
+	node.fingerLock.RLock()        // Lock the FingerTable to read it, and unlock it after.
 	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
-	node.fingerLock.RUnlock()      // After finishing read, unlock the FingerTable.
+	node.fingerLock.RUnlock()
 
-	// If the corresponding finger is itself, return this node successor.
+	// If the corresponding finger is this node, return this node successor.
 	if Equals(pred.ID, node.ID) {
 		// Lock the successor to read it, and unlock it after.
 		node.sucLock.RLock()
@@ -222,8 +222,9 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 		return suc, nil
 	}
 
-	// If the corresponding finger it's different to this node.
-	suc, err := node.RPC.FindSuccessor(pred, id) // Find the successor of the remote node obtained.
+	// If the corresponding finger is different to this node, find the successor of the ID
+	// from the remote node obtained.
+	suc, err := node.RPC.FindSuccessor(pred, id)
 	if err != nil {
 		message := "Error finding ID successor.\n"
 		log.Error(err.Error() + message)
