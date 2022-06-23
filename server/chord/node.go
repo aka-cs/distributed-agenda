@@ -36,6 +36,13 @@ type Node struct {
 
 // NewNode creates and returns a new Node.
 func NewNode(address string, configuration *Configuration) (*Node, error) {
+	// If configuration is null, report error.
+	if configuration == nil {
+		message := "Error creating node.\nInvalid configuration: configuration cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
 	id, err := HashKey(address, configuration.Hash) // Obtain the ID relative to this address.
 	if err != nil {
 		message := "Error creating node.\n"
@@ -201,6 +208,13 @@ func (node *Node) Join(knownNode *chord.Node) error {
 // using the finger table. Then, its successor is found and returned.
 func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	log.Debug("Finding ID successor.\n")
+
+	// If ID is null, report error.
+	if id == nil {
+		message := "Invalid ID: ID cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
 
 	// Look on the FingerTable to found the closest finger with ID lower than this ID.
 	node.fingerLock.RLock()        // Lock the FingerTable to read it, and unlock it after.
@@ -490,33 +504,45 @@ func (node *Node) PeriodicallyCheckSuccessor() {
 		case <-ticker.C:
 			node.CheckSuccessor() // If it's time, check if this node successor it's alive.
 		case <-node.shutdown:
-			ticker.Stop()
+			ticker.Stop() // If node server is shutdown, stop the thread.
 			return
 		}
 	}
 }
 
-// FixDescendant fix an entry of the descendents queue.
+// FixDescendant fix an entry of the queue of successors.
+// Given a node of the successor queue, gets the reference to a remote node it contains and
+// make a remote call to GetSuccessor to get its successor.
+// If the call fails, assume the remote node is dead, and it's removed from the queue of successors.
+// In this case, return the previous node of this queue node, to fix this entry later.
+// Otherwise, fix the next entry, updating its value with the obtained successor,
+// and return the next node of this queue node.
 func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node] {
 	log.Debug("Fixing descendant entry.\n")
 
+	// If the queue node is null, report error.
+	if qn == nil {
+		log.Error("Error fixing descendant entry.\nInvalid queue node: queue node cannot be null.\n")
+		return nil
+	}
+
 	node.sucLock.RLock()                      // Lock the queue to read it, and unlock it after.
-	queue := node.successors                  // Obtain this node descendents queue.
-	desc := qn.value                          // Obtain the descendant in this queue node.
+	queue := node.successors                  // Obtain the queue of successors of this node.
+	desc := qn.value                          // Obtain the successor contained in this queue node.
 	last := qn == queue.last                  // Verify if this queue node is the last one.
-	fulfilled := queue.capacity == queue.size // Verify if the node descendents queue is fulfilled.
+	fulfilled := queue.capacity == queue.size // Verify if the queue of successors of this node is fulfilled.
 	node.sucLock.RUnlock()
 
-	// If this queue node is the last one, and the queue is fulfilled, return.
+	// If this queue node is the last one, and the queue is fulfilled, return null to restart the fixing cycle.
 	if last && fulfilled {
 		return nil
 	}
 
-	suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this descendant.
-	// If there is an error, then assume this descendant node is dead.
+	suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this successor.
+	// If there is an error, then assume this successor is dead.
 	if err != nil {
-		log.Error(err.Error() + "Error getting successor of descendant.\n" +
-			"Therefore is assumed dead and removed from descendents queue.\n")
+		log.Error(err.Error() + "Error getting successor of this successor.\n" +
+			"Therefore is assumed dead and removed from the queue of successors.\n")
 
 		node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
 		queue.Remove(qn)    // Remove it from the descendents queue.
@@ -528,25 +554,28 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 
 	// If the obtained successor is not this node.
 	if !Equals(suc.ID, node.ID) {
-		// If this queue node is the last one.
+		// If this queue node is the last one, push it at the end of queue.
 		if qn == queue.last {
 			node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
-			queue.PushBack(suc) // Push this descendant successor in the queue.
+			queue.PushBack(suc) // Push this successor in the queue.
 			node.sucLock.Unlock()
 		} else {
 			// Otherwise, fix next node of this queue node.
 			node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
-			qn.next.value = suc // Set this descendant's successor as value of the next node of this queue node.
+			qn.next.value = suc // Set this successor as value of the next node of this queue node.
 			node.sucLock.Unlock()
 		}
 	} else {
+		// Otherwise, if the obtained successor is this node, then the ring has already been turned around,
+		// so there are no more successors to add to the queue.
+		// Therefore, return null to restart the fixing cycle.
 		return nil
 	}
 
+	// Return the next node of this queue node.
 	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
 	next := qn.next      // Obtain the next node of this queue node.
 	node.sucLock.RUnlock()
-	// Return the next node of this queue node.
 	return next
 }
 
@@ -560,17 +589,18 @@ func (node *Node) PeriodicallyFixDescendant() {
 	for {
 		select {
 		case <-ticker.C:
-			// If it's time, fix an entry of the descendents queue.
-			// If actual descendant entry is null, fix the first.
-			if qn == nil && node.successors.size > 0 {
-				qn = node.successors.first
-			}
-			// If actual descendant entry is not null,
-			if qn != nil {
+			// If it's time, and the queue of successors of this node is not empty,
+			// fix an entry of the queue.
+			if node.successors.size > 0 {
+				// If actual queue node entry is null, restart the fixing cycle,
+				// starting at the first queue node.
+				if qn == nil {
+					qn = node.successors.first
+				}
 				qn = node.FixDescendant(qn)
 			}
 		case <-node.shutdown:
-			ticker.Stop()
+			ticker.Stop() // If node server is shutdown, stop the thread.
 			return
 		}
 	}
