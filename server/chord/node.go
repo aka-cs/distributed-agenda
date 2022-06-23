@@ -632,17 +632,14 @@ func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*c
 
 // SetPredecessor sets the predecessor of this node.
 func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
+	// If the predecessor to set is this node, set predecessor to null.
 	if candidate != nil && Equals(candidate.ID, node.ID) {
 		candidate = nil
 	}
 
-	// Lock the predecessor to read it, and unlock it after.
-	node.predLock.RLock()
-	pred := node.predecessor
-	node.predLock.RUnlock()
-
-	// Lock the predecessor to write on it, and unlock it after.
+	// Lock the predecessor to read and write on it, and unlock it after.
 	node.predLock.Lock()
+	pred := node.predecessor
 	node.predecessor = candidate
 	node.predLock.Unlock()
 
@@ -663,7 +660,7 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 			return emptyResponse, nil
 		}
 
-		// Transfer the keys to this node successor.
+		// Transfer the old predecessor keys to this node successor.
 		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
 			log.Error(err.Error() + "Error transferring keys to successor.\n")
@@ -677,6 +674,7 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 
 // SetSuccessor sets predecessor for this node.
 func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
+	// If the successor to set is this node, set successor to null.
 	if candidate != nil && Equals(candidate.ID, node.ID) {
 		candidate = nil
 	}
@@ -688,6 +686,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 
 	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
+	// If queue is fulfilled, pop the last element, to gain queue space for the new successor.
 	if node.successors.Fulfilled() {
 		node.successors.PopBack()
 	}
@@ -709,7 +708,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 		return emptyResponse, nil
 	}
 
-	// Transfer the keys to the new successor, to update it.
+	// Transfer this node keys to the new successor, to update it.
 	err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
 	if err != nil {
 		log.Error(err.Error() + "Error transferring keys to the new successor.\n")
