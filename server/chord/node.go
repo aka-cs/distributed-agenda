@@ -155,28 +155,29 @@ func (node *Node) Stop() error {
 	return nil
 }
 
-// Join a node to the Chord ring, using another known node.
-// To join the node to the ring, the immediate successor of the node ID in the ring is searched,
-// starting from the known node, and the obtained node is taken as the successor of the node to be joined.
+// Join this node to the Chord ring, using another known node.
+// To join the node to the ring, the immediate successor of this node ID in the ring is searched,
+// starting from the known node, and the obtained node is taken as the successor of this node.
+// The keys corresponding to this node will be transferred by its successor, from the Notify
+// method that is called at the end of this method.
 func (node *Node) Join(knownNode *chord.Node) error {
 	log.Info("Joining new node to chord ring.\n")
 
 	// If the known node is null, return error: to join this node to the ring,
-	// you must know a node already on it.
+	// at least one node of the ring must be known.
 	if knownNode == nil {
 		message := "Invalid argument, known node cannot be null.\nError joining node to chord ring.\n"
 		log.Error(message)
 		return errors.New(message)
 	}
 
-	// Find the immediate successor of this node ID.
-	suc, err := node.RPC.FindSuccessor(knownNode, node.ID)
+	suc, err := node.RPC.FindSuccessor(knownNode, node.ID) // Find the immediate successor of this node ID.
 	if err != nil {
 		message := "Error joining node to chord ring.\n"
 		log.Error(err.Error() + message)
 		return errors.New(err.Error() + message)
 	}
-	// If the ID of the obtained node is this node ID, then this node is already on the ring.
+	// If the obtained node ID is this node ID, then this node is already on the ring.
 	if Equals(suc.ID, node.ID) {
 		message := "Error joining node to chord ring: a node with this ID already exists.\n"
 		log.Error(message)
@@ -185,6 +186,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 
 	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
+	// If queue is fulfilled, pop the last element, to gain queue space for the new successor.
 	if node.successors.Fulfilled() {
 		node.successors.PopBack()
 	}
