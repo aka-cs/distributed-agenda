@@ -37,10 +37,10 @@ type RemoteServices interface {
 	Set(node *chord.Node, req *chord.SetRequest) error
 	// Delete a <key, value> pair from a remote node storage.
 	Delete(node *chord.Node, req *chord.DeleteRequest) error
-	// Extend set a list of <key, values> pairs on the storage dictionary of a remote node.
+	// Extend the storage dictionary of a remote node with a list of <key, values> pairs.
 	Extend(node *chord.Node, req *chord.ExtendRequest) error
-	// Detach deletes all <key, values> pairs in a given interval storage of a remote node.
-	Detach(node *chord.Node, req *chord.DetachRequest) error
+	// Discard all <key, values> pairs in a given interval storage of a remote node.
+	Discard(node *chord.Node, req *chord.DiscardRequest) error
 }
 
 // GRPCServices implements the RemoteServices interface, for Chord GRPC services.
@@ -343,8 +343,8 @@ func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest)
 	return err
 }
 
-// Detach deletes all <key, values> pairs in a given interval storage of a remote node.
-func (services *GRPCServices) Detach(node *chord.Node, req *chord.DetachRequest) error {
+// Discard deletes all <key, values> pairs in a given interval storage of a remote node.
+func (services *GRPCServices) Discard(node *chord.Node, req *chord.DiscardRequest) error {
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -355,6 +355,6 @@ func (services *GRPCServices) Detach(node *chord.Node, req *chord.DetachRequest)
 	defer cancel()
 
 	// Return the result of the remote call.
-	_, err = remoteNode.Detach(ctx, req)
+	_, err = remoteNode.Discard(ctx, req)
 	return err
 }

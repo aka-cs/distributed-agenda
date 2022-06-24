@@ -11,7 +11,7 @@ type Storage interface {
 	Delete(string)
 	Segment([]byte, []byte) (map[string][]byte, error)
 	Extend(map[string][]byte) error
-	Detach([]byte, []byte) error
+	Discard([]byte, []byte) error
 }
 
 type Dictionary struct {
@@ -73,7 +73,7 @@ func (dictionary *Dictionary) Extend(data map[string][]byte) error {
 	return nil
 }
 
-func (dictionary *Dictionary) Detach(L, R []byte) error {
+func (dictionary *Dictionary) Discard(L, R []byte) error {
 	if L == nil && R == nil {
 		dictionary.data = make(map[string][]byte)
 	}
