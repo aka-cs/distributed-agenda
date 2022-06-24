@@ -9,11 +9,11 @@ import (
 
 // Configuration of Node.
 type Configuration struct {
-	Hash     func() hash.Hash // Hash function to use
-	HashSize int              // Hash size supported
+	Hash     func() hash.Hash // Hash function to use.
+	HashSize int              // Hash size supported.
 
-	ServerOpts []grpc.ServerOption
-	DialOpts   []grpc.DialOption
+	ServerOpts []grpc.ServerOption // Server options.
+	DialOpts   []grpc.DialOption   // Connection options.
 
 	Timeout time.Duration // Timeout of the connection.
 	MaxIdle time.Duration // Max lifetime of a connection.
@@ -23,18 +23,17 @@ type Configuration struct {
 
 // DefaultConfig returns a default configuration.
 func DefaultConfig() *Configuration {
-	Hash := sha1.New
-	HashSize := Hash().Size()
-	DialOpts := []grpc.DialOption{grpc.WithInsecure()}
+	Hash := sha1.New                                   // Use sha1 as the hash function.
+	HashSize := Hash().Size() * 8                      // Save the hash size supported.
+	DialOpts := []grpc.DialOption{grpc.WithInsecure()} // Use insecure connection as default connection.
 
+	// Build the configuration.
 	config := &Configuration{
 		Hash:             sha1.New,
 		HashSize:         HashSize,
 		DialOpts:         DialOpts,
 		StabilizingNodes: 5,
 	}
-
-	config.HashSize = config.Hash().Size()
 
 	return config
 }
