@@ -38,6 +38,8 @@ type RemoteServices interface {
 	Delete(node *chord.Node, req *chord.DeleteRequest) error
 	// Extend the storage dictionary of a remote node with a list of <key, values> pairs.
 	Extend(node *chord.Node, req *chord.ExtendRequest) error
+	// Segment return all <key, values> pairs in a given interval from the storage of a remote node.
+	Segment(node *chord.Node, req *chord.SegmentRequest) error
 	// Discard all <key, values> pairs in a given interval from the storage of a remote node.
 	Discard(node *chord.Node, req *chord.DiscardRequest) error
 }
@@ -413,6 +415,26 @@ func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest)
 
 	// Return the result of the remote call.
 	_, err = remoteNode.Extend(ctx, req)
+	return err
+}
+
+// Segment return all <key, values> pairs in a given interval from the storage of a remote node.
+func (services *GRPCServices) Segment(node *chord.Node, req *chord.SegmentRequest) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
+	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	if err != nil {
+		return err
+	}
+
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), services.Timeout)
+	defer cancel()
+
+	// Return the result of the remote call.
+	_, err = remoteNode.Segment(ctx, req)
 	return err
 }
 

@@ -8,9 +8,8 @@ import (
 	"server/chord/chord"
 )
 
-// Necessary definitions.
+// Useful definitions.
 var (
-	nullNode      = &chord.Node{}
 	emptyRequest  = &chord.EmptyRequest{}
 	emptyResponse = &chord.EmptyResponse{}
 )

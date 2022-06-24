@@ -1035,6 +1035,29 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	return emptyResponse, err
 }
 
+// Segment return all <key, values> pairs in a given interval from storage.
+func (node *Node) Segment(ctx context.Context, req *chord.SegmentRequest) (*chord.SegmentResponse, error) {
+	log.Debug("Getting an interval of keys from local storage dictionary.\n")
+
+	// If the get request is null, report error.
+	if req == nil {
+		message := "Segment request cannot be null.\n"
+		log.Error(message)
+		return nil, errors.New(message)
+	}
+
+	node.dictLock.RLock()                                    // Lock the dictionary to read it, and unlock it after.
+	dictionary, err := node.dictionary.Segment(req.L, req.R) // Set the <key, value> pairs on the storage.
+	node.dictLock.RUnlock()
+	if err != nil {
+		message := "Error getting an interval of keys from storage dictionary.\n"
+		log.Error(err.Error() + message)
+		return nil, errors.New(err.Error() + message)
+	}
+	// Return the dictionary corresponding to the interval.
+	return &chord.SegmentResponse{Dictionary: dictionary}, err
+}
+
 // Discard all <key, values> pairs in a given interval from storage.
 func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chord.EmptyResponse, error) {
 	log.Debug("Discarding an interval of keys from local storage dictionary.\n")
@@ -1050,7 +1073,7 @@ func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chor
 	err := node.dictionary.Discard(req.L, req.R) // Set the <key, value> pairs on the storage.
 	node.dictLock.Unlock()
 	if err != nil {
-		message := "Error Discarding interval of keys from storage dictionary.\n"
+		message := "Error discarding interval of keys from storage dictionary.\n"
 		log.Error(err.Error() + message)
 		return nil, errors.New(err.Error() + message)
 	}
