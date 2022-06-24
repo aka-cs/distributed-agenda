@@ -7,14 +7,13 @@ import (
 	"google.golang.org/grpc"
 	"server/chord/chord"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 // RemoteServices enables a node to interact with other nodes in the ring, as a client of its servers.
 type RemoteServices interface {
-	Start() // Start the services.
-	Stop()  // Stop the services.
+	Start() error // Start the services.
+	Stop() error  // Stop the services.
 
 	// GetPredecessor returns the node believed to be the current predecessor of a remote node.
 	GetPredecessor(*chord.Node) (*chord.Node, error)
@@ -39,7 +38,7 @@ type RemoteServices interface {
 	Delete(node *chord.Node, req *chord.DeleteRequest) error
 	// Extend the storage dictionary of a remote node with a list of <key, values> pairs.
 	Extend(node *chord.Node, req *chord.ExtendRequest) error
-	// Discard all <key, values> pairs in a given interval storage of a remote node.
+	// Discard all <key, values> pairs in a given interval from the storage of a remote node.
 	Discard(node *chord.Node, req *chord.DiscardRequest) error
 }
 
@@ -50,7 +49,7 @@ type GRPCServices struct {
 	connections    map[string]*RemoteNode // Dictionary of <address, open connection>.
 	connectionsMtx sync.RWMutex           // Locks the dictionary for reading or writing.
 
-	running int32 // Determine if the service is actually running.
+	shutdown chan struct{} // Determine if the service is actually running.
 }
 
 // NewGRPCServices creates a new GRPCServices object.
@@ -59,7 +58,7 @@ func NewGRPCServices(config *Configuration) *GRPCServices {
 	services := &GRPCServices{
 		Configuration: config,
 		connections:   nil,
-		running:       0,
+		shutdown:      nil,
 	}
 
 	// Return the GRPCServices object.
@@ -68,18 +67,56 @@ func NewGRPCServices(config *Configuration) *GRPCServices {
 
 // GRPCServices internal methods.
 
+// Start the services.
+func (services *GRPCServices) Start() error {
+	// If transport layer services are actually running, report error.
+	if IsOpen(services.shutdown) {
+		message := "Error starting services: transport layer services are actually running.\n"
+		log.Error(message)
+		return errors.New(message)
+	}
+
+	services.shutdown = make(chan struct{}) // Report the services are running.
+	log.Info("Starting transport layer services...\n")
+
+	services.connections = make(map[string]*RemoteNode) // Create the dictionary of <address, open connection>.
+	// Start periodically threads.
+	go services.CloseOldConnections() // Check and close old connections periodically.
+
+	log.Info("Transport layer services started.\n")
+	return nil
+}
+
+// Stop the services, by reporting the transport layer services are now shutdown,
+// to make the periodic threads stop themselves eventually.
+func (services *GRPCServices) Stop() error {
+	// If transport layer services are not actually running, report error.
+	if !IsOpen(services.shutdown) {
+		message := "Error stopping services: transport layer services are actually shutdown.\n"
+		log.Error(message)
+		return errors.New(message)
+	}
+
+	log.Info("Closing server...\n")
+	close(services.shutdown) // Report the services are shutdown.
+	log.Info("Transport layer services closed.\n")
+	return nil
+}
+
 // Connect with a remote address.
 func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 	// Check if the service is shutdown, and if condition holds return and report it.
-	if atomic.LoadInt32(&services.running) == 0 {
-		return nil, errors.New("must start grpc service first")
+	if !IsOpen(services.shutdown) {
+		return nil, errors.New("Error creating connection: must start grpc services first.\n")
 	}
 
 	services.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it after.
 	// Checks if the dictionary is instantiated. If condition not holds return the error.
 	if services.connections == nil {
 		services.connectionsMtx.Unlock()
-		return nil, errors.New("must start grpc service first")
+		message := "Error creating connection: connection table empty.\n"
+		log.Error(message)
+		return nil, errors.New(message)
 	}
 	remoteNode, ok := services.connections[addr]
 	services.connectionsMtx.RUnlock()
@@ -89,14 +126,15 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 		return remoteNode, nil
 	}
 
-	conn, err := grpc.Dial(addr, services.DialOpts...) // Establish the connection.
-
-	// Check if the connection was successfully. If condition not holds return the error.
+	conn, err := grpc.Dial(addr, services.DialOpts...) // Otherwise, establish the connection.
 	if err != nil {
-		return nil, err
+		message := "Error creating connection.\n"
+		log.Error(message)
+		return nil, errors.New(err.Error() + message)
 	}
 
 	client := chord.NewChordClient(conn) // Create the ChordClient associated with the connection.
+	// Build the correspondent RemoteNode.
 	remoteNode = &RemoteNode{client,
 		addr,
 		conn,
@@ -112,65 +150,60 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 
 // CloseOldConnections close the old open connections.
 func (services *GRPCServices) CloseOldConnections() {
-	// If the service is shutdown, return.
-	if atomic.LoadInt32(&services.running) == 0 {
+	// If the service is shutdown, close all the connections and return.
+	if !IsOpen(services.shutdown) {
+		services.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it after.
+		// For RemoteNode on the dictionary, close the connection with it.
+		for _, remoteNode := range services.connections {
+			remoteNode.CloseConnection()
+		}
+		services.connections = nil // Delete dictionary of connections.
+		services.connectionsMtx.Unlock()
 		return
 	}
-	services.connectionsMtx.Lock() // Lock the dictionary to write on it.
+
+	services.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it after.
+	// Checks if the dictionary is instantiated. If condition not holds report error.
+	if services.connections == nil {
+		services.connectionsMtx.Unlock()
+		log.Error("Error closing connection: connection table empty.\n")
+		return
+	}
+	services.connectionsMtx.RUnlock()
+
+	services.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it after.
 	// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
 	for addr, remoteNode := range services.connections {
 		if time.Since(remoteNode.lastActive) > services.MaxIdle {
 			remoteNode.CloseConnection()
-			delete(services.connections, addr) // Delete the <address, connection> pair of the dictionary.
+			delete(services.connections, addr) // Delete the <address, open connection> pair of the dictionary.
 		}
 	}
-	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
+	services.connectionsMtx.Unlock()
 }
 
 // PeriodicallyCloseConnections periodically close the old open connections.
 func (services *GRPCServices) PeriodicallyCloseConnections() {
 	ticker := time.NewTicker(60 * time.Second) // Set the time between routine activations.
-
 	for {
 		select {
 		case <-ticker.C:
 			services.CloseOldConnections() // If it's time, close old connections.
+		case <-services.shutdown:
+			services.CloseOldConnections() // If services are shutdown, close all connections and stop the thread.
+			return
 		}
 	}
-}
-
-// Start the services.
-func (services *GRPCServices) Start() {
-	atomic.StoreInt32(&services.running, 1) // Report the service is running.
-	log.Info("Starting transport layer services...\n")
-
-	services.connections = make(map[string]*RemoteNode) // Create the dictionary of <address, open connection>.
-	// Start periodically threads.
-	go services.CloseOldConnections() // Check and close old connections periodically.
-
-	log.Info("Transport layer services started.\n")
-}
-
-// Stop the services.
-func (services *GRPCServices) Stop() {
-	atomic.StoreInt32(&services.running, 0) // Report the service is shutdown.
-
-	// Close all the connections
-	services.connectionsMtx.Lock() // Lock the dictionary to write on it.
-	// For RemoteNode on the dictionary, if its lifetime is over, close the connection.
-	for _, remoteNode := range services.connections {
-		if time.Since(remoteNode.lastActive) > services.MaxIdle {
-			remoteNode.CloseConnection()
-		}
-	}
-	services.connections = nil       // Delete dictionary of connections.
-	services.connectionsMtx.Unlock() // After finishing write, unlock the dictionary.
 }
 
 // GRPCServices remote chord methods.
 
 // GetPredecessor returns the node believed to be the current predecessor of a remote node.
 func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, error) {
+	if node == nil {
+		return nil, errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
@@ -186,6 +219,10 @@ func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, err
 
 // GetSuccessor returns the node believed to be the current successor of a remote node.
 func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error) {
+	if node == nil {
+		return nil, errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
@@ -201,6 +238,10 @@ func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error
 
 // SetPredecessor sets the predecessor of a remote node.
 func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -217,6 +258,10 @@ func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
 
 // SetSuccessor sets the successor of a remote node.
 func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -233,6 +278,10 @@ func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
 
 // FindSuccessor finds the node that succeeds this ID, starting at a remote node.
 func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord.Node, error) {
+	if node == nil {
+		return nil, errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
@@ -248,6 +297,10 @@ func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord
 
 // Notify a remote node that it possibly have a new predecessor.
 func (services *GRPCServices) Notify(node, pred *chord.Node) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -264,6 +317,10 @@ func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 
 // Check if a remote node is alive.
 func (services *GRPCServices) Check(node *chord.Node) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -282,6 +339,10 @@ func (services *GRPCServices) Check(node *chord.Node) error {
 
 // Get the value associated to a key on a remote node storage.
 func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*chord.GetResponse, error) {
+	if node == nil {
+		return nil, errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
@@ -297,6 +358,10 @@ func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*cho
 
 // Set a <key, value> pair on a remote node storage.
 func (services *GRPCServices) Set(node *chord.Node, req *chord.SetRequest) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -313,6 +378,10 @@ func (services *GRPCServices) Set(node *chord.Node, req *chord.SetRequest) error
 
 // Delete a <key, value> pair from a remote node storage.
 func (services *GRPCServices) Delete(node *chord.Node, req *chord.DeleteRequest) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -329,6 +398,10 @@ func (services *GRPCServices) Delete(node *chord.Node, req *chord.DeleteRequest)
 
 // Extend set a list of <key, values> pairs on the storage dictionary of a remote node.
 func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err
@@ -345,6 +418,10 @@ func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest)
 
 // Discard deletes all <key, values> pairs in a given interval storage of a remote node.
 func (services *GRPCServices) Discard(node *chord.Node, req *chord.DiscardRequest) error {
+	if node == nil {
+		return errors.New("Cannot establish connection with a null node.\n")
+	}
+
 	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
 	if err != nil {
 		return err

@@ -93,7 +93,12 @@ func (node *Node) Start() error {
 	chord.RegisterChordServer(node.server, node) // Register the node server as a chord server.
 	log.Info("Chord services registered.\n")
 
-	node.RPC.Start() // Start the RPC (transport layer) services.
+	err := node.RPC.Start() // Start the RPC (transport layer) services.
+	if err != nil {
+		message := "Error starting server.\n"
+		log.Error(message)
+		return errors.New(err.Error() + message)
+	}
 
 	// Start periodically threads.
 	go node.PeriodicallyCheckPredecessor()
@@ -151,12 +156,18 @@ func (node *Node) Stop() error {
 		}
 	}
 
+	err := node.RPC.Stop() // Stop the RPC (transport layer) services.
+	if err != nil {
+		message := "Error stopping server.\n"
+		log.Error(message)
+		return errors.New(err.Error() + message)
+	}
+
 	node.successors = nil  // Delete the successors queue.
 	node.fingerTable = nil // Delete the finger table.
 	node.dictionary = nil  // Delete the node dictionary.
 	node.server = nil      // Delete the node server.
 
-	node.RPC.Stop()      // Stop the RPC (transport layer) services.
 	close(node.shutdown) // Report the node server is shutdown.
 	log.Info("Server closed.\n")
 	return nil
@@ -1024,7 +1035,7 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	return emptyResponse, err
 }
 
-// Discard all <key, values> pairs in a given interval storage.
+// Discard all <key, values> pairs in a given interval from storage.
 func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chord.EmptyResponse, error) {
 	log.Debug("Discarding an interval of keys from local storage dictionary.\n")
 
