@@ -23,9 +23,14 @@ type Configuration struct {
 
 // DefaultConfig returns a default configuration.
 func DefaultConfig() *Configuration {
-	Hash := sha1.New                                   // Use sha1 as the hash function.
-	HashSize := Hash().Size() * 8                      // Save the hash size supported.
-	DialOpts := []grpc.DialOption{grpc.WithInsecure()} // Use insecure connection as default connection.
+	Hash := sha1.New              // Use sha1 as the hash function.
+	HashSize := Hash().Size() * 8 // Save the hash size supported.
+	DialOpts := []grpc.DialOption{
+		grpc.WithBlock(),
+		grpc.WithTimeout(5 * time.Second),
+		grpc.FailOnNonTempDialError(true),
+		grpc.WithInsecure(),
+	}
 
 	// Build the configuration.
 	config := &Configuration{

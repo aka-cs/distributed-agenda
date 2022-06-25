@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"net"
 	"server/chord/chord"
 	"sync"
 	"time"
@@ -28,7 +29,8 @@ type Node struct {
 	dictionary Storage      // Storage dictionary of this node.
 	dictLock   sync.RWMutex // Locks the dictionary for reading or writing.
 
-	server   *grpc.Server  // Node server.
+	server   *grpc.Server // Node server.
+	sock     *net.TCPListener
 	shutdown chan struct{} // Determine if the node server is actually running.
 
 	chord.UnimplementedChordServer
@@ -66,6 +68,8 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 		server:      nil,
 		shutdown:    nil}
 
+	log.Info("Node created with the address " + node.Address + ".\n")
+
 	// Return the node.
 	return node, nil
 }
@@ -85,15 +89,23 @@ func (node *Node) Start() error {
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 	log.Info("Starting server...\n")
 
+	// Try to start the listener
+	listener, err := net.Listen("tcp", node.Address)
+	if err != nil {
+		return err
+	}
+	log.Info("Listen at " + node.Address + ".\n")
+
 	node.successors = NewQueue[chord.Node](node.config.StabilizingNodes) // Create the successors queue.
 	node.fingerTable = NewFingerTable(node.Node, node.config.HashSize)   // Create the finger table.
 	node.dictionary = NewDictionary(node.config.Hash)                    // Create the node dictionary.
 	node.server = grpc.NewServer(node.config.ServerOpts...)              // Create the node server.
+	node.sock = listener.(*net.TCPListener)
 
 	chord.RegisterChordServer(node.server, node) // Register the node server as a chord server.
 	log.Info("Chord services registered.\n")
 
-	err := node.RPC.Start() // Start the RPC (transport layer) services.
+	err = node.RPC.Start() // Start the RPC (transport layer) services.
 	if err != nil {
 		message := "Error starting server.\n"
 		log.Error(message)
@@ -101,6 +113,7 @@ func (node *Node) Start() error {
 	}
 
 	// Start periodically threads.
+	go node.listen()
 	go node.PeriodicallyCheckPredecessor()
 	go node.PeriodicallyCheckSuccessor()
 	go node.PeriodicallyStabilize()
@@ -163,6 +176,7 @@ func (node *Node) Stop() error {
 		return errors.New(err.Error() + message)
 	}
 
+	node.server.Stop()
 	node.successors = nil  // Delete the successors queue.
 	node.fingerTable = nil // Delete the finger table.
 	node.dictionary = nil  // Delete the node dictionary.
@@ -173,13 +187,21 @@ func (node *Node) Stop() error {
 	return nil
 }
 
+// Listens for inbound connections
+func (node *Node) listen() {
+	err := node.server.Serve(node.sock)
+	if err != nil {
+		return
+	}
+}
+
 // Join this node to the Chord ring, using another known node.
 // To join the node to the ring, the immediate successor of this node ID in the ring is searched,
 // starting from the known node, and the obtained node is taken as the successor of this node.
 // The keys corresponding to this node will be transferred by its successor, from the Notify
 // method that is called at the end of this method.
 func (node *Node) Join(knownNode *chord.Node) error {
-	log.Info("Joining new node to chord ring.\n")
+	log.Info("Joining new node to chord ring.\nJoining at " + knownNode.Address + ".\n")
 
 	// If the known node is null, return error: to join this node to the ring,
 	// at least one node of the ring must be known.
@@ -191,7 +213,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID) // Find the immediate successor of this node ID.
 	if err != nil {
-		message := "Error joining node to chord ring.\n"
+		message := "\nError joining node to chord ring.\n"
 		log.Error(err.Error() + message)
 		return errors.New(err.Error() + message)
 	}
@@ -827,13 +849,13 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
-	log.Debug("Getting key associated value.\n")
-
 	// If the get request is null, report error.
 	if req == nil {
-		message := "Get request cannot be null.\n"
+		message := "GET ERROR: Get request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
+	} else {
+		log.Info("GET: key=" + req.Key + ".\n")
 	}
 
 	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
@@ -878,13 +900,13 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
-	log.Debug("Setting a <key, value> pair.\n")
-
 	// If the get request is null, report error.
 	if req == nil {
-		message := "Set request cannot be null.\n"
+		message := "SET ERROR: Set request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
+	} else {
+		log.Info("SET: key=" + req.Key + " value=" + string(req.Value) + ".\n")
 	}
 
 	// If this request is a replica, resolve it local.
@@ -945,13 +967,13 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 // Delete a <key, value> pair from storage.
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
-	log.Debug("Deleting a <key, value> pair.\n")
-
 	// If the get request is null, report error.
 	if req == nil {
-		message := "Delete request cannot be null.\n"
+		message := "DELETE ERROR: Delete request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
+	} else {
+		log.Info("DELETE: key=" + req.Key + ".\n")
 	}
 
 	// If this request is a replica, resolve it local.
