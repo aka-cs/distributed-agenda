@@ -567,7 +567,7 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 
 	// If the queue node is null, report error.
 	if qn == nil {
-		log.Error("Error fixing descendant entry.\nInvalid queue node: queue node cannot be null.\n")
+		log.Error("Error fixing descendant entry: queue node argument cannot be null.\n")
 		return nil
 	}
 
@@ -586,8 +586,8 @@ func (node *Node) FixDescendant(qn *QueueNode[chord.Node]) *QueueNode[chord.Node
 	suc, err := node.RPC.GetSuccessor(desc) // Otherwise, get the successor of this successor.
 	// If there is an error, then assume this successor is dead.
 	if err != nil {
-		log.Error(err.Error() + "Error getting successor of this successor.\n" +
-			"Therefore is assumed dead and removed from the queue of successors.\n")
+		log.Error("Error getting successor of this successor.\n" +
+			"Therefore is assumed dead and removed from the queue of successors.\n" + err.Error() + "\n")
 
 		node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
 		queue.Remove(qn)    // Remove it from the descendents queue.
