@@ -42,7 +42,7 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 
 	// If configuration is null, report error.
 	if configuration == nil {
-		message := "Error creating node.\nInvalid configuration: configuration cannot be null.\n"
+		message := "Error creating node: configuration cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
 	}
