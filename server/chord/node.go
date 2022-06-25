@@ -1100,7 +1100,7 @@ func (node *Node) Segment(ctx context.Context, req *chord.SegmentRequest) (*chor
 	node.dictLock.RUnlock()
 	if err != nil {
 		message := "Error getting an interval of keys from storage dictionary.\n"
-		log.Error(err.Error() + message)
+		log.Error(message)
 		return nil, errors.New(message + err.Error())
 	}
 	// Return the dictionary corresponding to the interval.
@@ -1123,7 +1123,7 @@ func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chor
 	node.dictLock.Unlock()
 	if err != nil {
 		message := "Error discarding interval of keys from storage dictionary.\n"
-		log.Error(err.Error() + message)
+		log.Error(message)
 		return nil, errors.New(message + err.Error())
 	}
 	return emptyResponse, err
