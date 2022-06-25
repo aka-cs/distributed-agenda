@@ -996,11 +996,11 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 	// If the get request is null, report error.
 	if req == nil {
-		message := "DELETE ERROR: Delete request cannot be null.\n"
+		message := "Delete error: delete request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
 	} else {
-		log.Info("DELETE: key=" + req.Key + ".\n")
+		log.Info("Delete: key=" + req.Key + ".\n")
 	}
 
 	// If this request is a replica, resolve it local.
@@ -1078,7 +1078,7 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	node.dictLock.Unlock()
 	if err != nil {
 		message := "Error extending storage dictionary.\n"
-		log.Error(err.Error() + message)
+		log.Error(message)
 		return nil, errors.New(message + err.Error())
 	}
 	return emptyResponse, err
