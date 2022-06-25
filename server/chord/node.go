@@ -211,19 +211,21 @@ func (node *Node) Listen() {
 // The keys corresponding to this node will be transferred by its successor, from the Notify
 // method that is called at the end of this method.
 func (node *Node) Join(knownNode *chord.Node) error {
-	log.Info("Joining new node to chord ring.\nJoining at " + knownNode.Address + ".\n")
+	log.Info("Joining new node to chord ring.\n")
 
 	// If the known node is null, return error: to join this node to the ring,
 	// at least one node of the ring must be known.
 	if knownNode == nil {
-		message := "Invalid argument, known node cannot be null.\nError joining node to chord ring.\n"
+		message := "Error joining node to chord ring: known node cannot be null.\n"
 		log.Error(message)
 		return errors.New(message)
 	}
 
+	log.Info("Known node address: " + knownNode.Address + ".\n")
+
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID) // Find the immediate successor of this node ID.
 	if err != nil {
-		message := "\nError joining node to chord ring.\n"
+		message := "\nError joining node to chord ring: cannot find successor of this node ID.\n"
 		log.Error(err.Error() + message)
 		return errors.New(err.Error() + "\n" + message)
 	}
