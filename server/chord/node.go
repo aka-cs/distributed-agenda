@@ -927,11 +927,11 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 	// If the get request is null, report error.
 	if req == nil {
-		message := "SET ERROR: Set request cannot be null.\n"
+		message := "Set error: set request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
 	} else {
-		log.Info("SET: key=" + req.Key + " value=" + string(req.Value) + ".\n")
+		log.Info("Set: key=" + req.Key + " value=" + string(req.Value) + ".\n")
 	}
 
 	// If this request is a replica, resolve it local.
