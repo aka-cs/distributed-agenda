@@ -870,13 +870,15 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
+	log.Debug("Getting key associated value.\n")
+
 	// If the get request is null, report error.
 	if req == nil {
-		message := "GET ERROR: Get request cannot be null.\n"
+		message := "Get error: get request cannot be null.\n"
 		log.Error(message)
 		return nil, errors.New(message)
 	} else {
-		log.Info("GET: key=" + req.Key + ".\n")
+		log.Info("Get: key=" + req.Key + ".\n")
 	}
 
 	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
@@ -921,6 +923,8 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
+	log.Debug("Setting a <key, value> pair.\n")
+
 	// If the get request is null, report error.
 	if req == nil {
 		message := "SET ERROR: Set request cannot be null.\n"
@@ -988,6 +992,8 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 // Delete a <key, value> pair from storage.
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
+	log.Debug("Deleting a <key, value> pair.\n")
+
 	// If the get request is null, report error.
 	if req == nil {
 		message := "DELETE ERROR: Delete request cannot be null.\n"
