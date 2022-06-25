@@ -93,13 +93,14 @@ func (node *Node) Start() error {
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 
 	// Start listening at correspondent address.
+	log.Info("Trying to listen at correspondent node address.\n")
 	listener, err := net.Listen("tcp", node.Address)
 	if err != nil {
-		message := "Error starting server: this node server is actually running.\n"
+		message := "Error starting server: cannot listen at address " + node.Address + ".\n"
 		log.Error(message)
 		return errors.New(err.Error() + "\n" + message)
 	}
-	log.Info("Listen at " + node.Address + ".\n")
+	log.Info("Listening at " + node.Address + ".\n")
 
 	node.successors = NewQueue[chord.Node](node.config.StabilizingNodes) // Create the successors queue.
 	node.fingerTable = NewFingerTable(node.Node, node.config.HashSize)   // Create the finger table.
@@ -112,13 +113,15 @@ func (node *Node) Start() error {
 
 	err = node.RPC.Start() // Start the RPC (transport layer) services.
 	if err != nil {
-		message := "Error starting server.\n"
+		message := "Error starting server: cannot start the transport layer.\n"
 		log.Error(message)
-		return errors.New(err.Error() + message)
+		return errors.New(err.Error() + "\n" + message)
 	}
 
+	// Start serving at the opened socket.
+	go node.Listen()
+
 	// Start periodically threads.
-	go node.listen()
 	go node.PeriodicallyCheckPredecessor()
 	go node.PeriodicallyCheckSuccessor()
 	go node.PeriodicallyStabilize()
@@ -160,7 +163,7 @@ func (node *Node) Stop() error {
 		if err != nil {
 			message := "Error setting new predecessor of this node successor.\nError stopping server.\n"
 			log.Error(message)
-			return errors.New(err.Error() + message)
+			return errors.New(err.Error() + "\n" + message)
 		}
 	}
 
@@ -170,7 +173,7 @@ func (node *Node) Stop() error {
 		if err != nil {
 			message := "Error setting new successor of this node predecessor.\nError stopping server.\n"
 			log.Error(message)
-			return errors.New(err.Error() + message)
+			return errors.New(err.Error() + "\n" + message)
 		}
 	}
 
@@ -178,7 +181,7 @@ func (node *Node) Stop() error {
 	if err != nil {
 		message := "Error stopping server.\n"
 		log.Error(message)
-		return errors.New(err.Error() + message)
+		return errors.New(err.Error() + "\n" + message)
 	}
 
 	node.server.Stop()
@@ -192,8 +195,8 @@ func (node *Node) Stop() error {
 	return nil
 }
 
-// Listens for inbound connections
-func (node *Node) listen() {
+// Listen for inbound connections
+func (node *Node) Listen() {
 	err := node.server.Serve(node.sock)
 	if err != nil {
 		return
@@ -220,7 +223,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	if err != nil {
 		message := "\nError joining node to chord ring.\n"
 		log.Error(err.Error() + message)
-		return errors.New(err.Error() + message)
+		return errors.New(err.Error() + "\n" + message)
 	}
 	// If the obtained node ID is this node ID, then this node is already on the ring.
 	if Equals(suc.ID, node.ID) {
@@ -280,7 +283,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	if err != nil {
 		message := "Error finding ID successor.\n"
 		log.Error(err.Error() + message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 	// Return the obtained successor.
 	log.Debug("ID successor found.\n")
@@ -297,14 +300,14 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	if err != nil {
 		message := "Error locating key.\n"
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 
 	suc, err := node.FindIDSuccessor(id) // Find and return the successor of this ID.
 	if err != nil {
 		message := "Error locating key.\n"
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 
 	log.Info("Successful key location.\n")
@@ -812,21 +815,21 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		node.dictLock.RUnlock()
 		if err != nil {
 			message := "Error obtaining the new predecessor its corresponding keys.\n"
-			return nil, errors.New(err.Error() + message)
+			return nil, errors.New(err.Error() + "\n" + message)
 		}
 
 		// Build the new predecessor dictionary, by transferring its correspondent keys.
 		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
 			message := "Error transferring keys to the new predecessor.\n"
-			return nil, errors.New(err.Error() + message)
+			return nil, errors.New(err.Error() + "\n" + message)
 		}
 
 		// Delete the transferred keys from successor storage replication.
 		err = node.RPC.Discard(suc, &chord.DiscardRequest{L: nil, R: new.ID})
 		if err != nil {
 			message := "Error deleting replicated keys on the successor.\n"
-			return nil, errors.New(err.Error() + message)
+			return nil, errors.New(err.Error() + "\n" + message)
 		}
 
 		// If the old predecessor is not null, delete the old predecessor keys from this node.
@@ -837,7 +840,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 			node.dictLock.Unlock()
 			if err != nil {
 				message := "Error deleting old predecessor keys on this node.\n"
-				return nil, errors.New(err.Error() + message)
+				return nil, errors.New(err.Error() + "\n" + message)
 			}
 		}
 	}
@@ -867,7 +870,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 	if err != nil {
 		message := "Error getting key.\n"
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 
 	keyNode := node.Node  // By default, take this node to find the key in the local storage.
@@ -882,7 +885,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 		if err != nil {
 			message := "Error getting key.\n"
 			log.Error(message)
-			return nil, errors.New(err.Error() + message)
+			return nil, errors.New(err.Error() + "\n" + message)
 		}
 	}
 
@@ -894,7 +897,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 		if err != nil {
 			message := "Error getting key.\n"
 			log.Error(message)
-			return nil, errors.New(err.Error() + message)
+			return nil, errors.New(err.Error() + "\n" + message)
 		}
 		// Return the value associated to this key.
 		return &chord.GetResponse{Value: value}, nil
@@ -927,7 +930,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	if err != nil {
 		message := "Error setting key.\n"
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 
 	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
@@ -943,7 +946,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 			if err != nil {
 				message := "Error setting key.\n"
 				log.Error(message)
-				return nil, errors.New(err.Error() + message)
+				return nil, errors.New(err.Error() + "\n" + message)
 			}
 		}
 	}
@@ -994,7 +997,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	if err != nil {
 		message := "Error deleting key.\n"
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 
 	keyNode := node.Node  // By default, take this node to delete the <key, value> pair from the local storage.
@@ -1009,7 +1012,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 		if err != nil {
 			message := "Error deleting key.\n"
 			log.Error(message)
-			return nil, errors.New(err.Error() + message)
+			return nil, errors.New(err.Error() + "\n" + message)
 		}
 	}
 
@@ -1057,7 +1060,7 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	if err != nil {
 		message := "Error extending storage dictionary.\n"
 		log.Error(err.Error() + message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 	return emptyResponse, err
 }
@@ -1079,7 +1082,7 @@ func (node *Node) Segment(ctx context.Context, req *chord.SegmentRequest) (*chor
 	if err != nil {
 		message := "Error getting an interval of keys from storage dictionary.\n"
 		log.Error(err.Error() + message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 	// Return the dictionary corresponding to the interval.
 	return &chord.SegmentResponse{Dictionary: dictionary}, err
@@ -1102,7 +1105,7 @@ func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chor
 	if err != nil {
 		message := "Error discarding interval of keys from storage dictionary.\n"
 		log.Error(err.Error() + message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(err.Error() + "\n" + message)
 	}
 	return emptyResponse, err
 }
