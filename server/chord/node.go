@@ -401,7 +401,7 @@ func (node *Node) CheckPredecessor() {
 		err := node.RPC.Check(pred)
 		// In case of error, assume predecessor is not alive, and set this node predecessor to null.
 		if err != nil {
-			log.Error(err.Error() + "Predecessor failed.\n")
+			log.Error("Predecessor failed.\n" + err.Error() + "\n")
 
 			// Lock the predecessor to write on it, and unlock it after.
 			node.predLock.Lock()
