@@ -197,8 +197,10 @@ func (node *Node) Stop() error {
 
 // Listen for inbound connections
 func (node *Node) Listen() {
+	log.Info("Start serving at opened socket.\n")
 	err := node.server.Serve(node.sock)
 	if err != nil {
+		log.Error(err.Error() + "\nCannot serve at " + node.Address + ".\n")
 		return
 	}
 }
