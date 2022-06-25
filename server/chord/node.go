@@ -342,7 +342,7 @@ func (node *Node) Stabilize() {
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
 	if err != nil {
-		log.Error(err.Error() + "Error stabilizing node.\n")
+		log.Error("Error stabilizing node.\n" + err.Error() + "\n")
 	}
 
 	// If candidate is not null, and it's closer to this node than its current successor,
@@ -360,7 +360,7 @@ func (node *Node) Stabilize() {
 
 	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
 	if err != nil {
-		log.Error(err.Error() + "Error stabilizing node.\n")
+		log.Error("Error stabilizing node.\n" + err.Error() + "\n")
 		return
 	}
 	log.Debug("Node stabilized.\n")
