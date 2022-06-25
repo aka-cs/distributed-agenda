@@ -38,6 +38,8 @@ type Node struct {
 
 // NewNode creates and returns a new Node.
 func NewNode(address string, configuration *Configuration) (*Node, error) {
+	log.Info("Creating a new node.\n")
+
 	// If configuration is null, report error.
 	if configuration == nil {
 		message := "Error creating node.\nInvalid configuration: configuration cannot be null.\n"
@@ -47,9 +49,9 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 
 	id, err := HashKey(address, configuration.Hash) // Obtain the ID relative to this address.
 	if err != nil {
-		message := "Error creating node.\n"
+		message := "Error creating node: cannot hash node address."
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(message + "\n" + err.Error())
 	}
 
 	// Creates the new node with the obtained ID and same address.
@@ -79,6 +81,8 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 // Start the node server, by registering the server of this node as a chord server, starting
 // the transport layer services and the periodically threads that stabilizes the server.
 func (node *Node) Start() error {
+	log.Info("Starting server...\n")
+
 	// If node server is actually running, report error.
 	if IsOpen(node.shutdown) {
 		message := "Error starting server: this node server is actually running.\n"
@@ -87,12 +91,13 @@ func (node *Node) Start() error {
 	}
 
 	node.shutdown = make(chan struct{}) // Report the node server is running.
-	log.Info("Starting server...\n")
 
-	// Try to start the listener
+	// Start listening at correspondent address.
 	listener, err := net.Listen("tcp", node.Address)
 	if err != nil {
-		return err
+		message := "Error starting server: this node server is actually running.\n"
+		log.Error(message)
+		return errors.New(err.Error() + "\n" + message)
 	}
 	log.Info("Listen at " + node.Address + ".\n")
 
