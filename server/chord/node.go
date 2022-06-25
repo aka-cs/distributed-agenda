@@ -489,7 +489,7 @@ func (node *Node) CheckSuccessor() {
 			node.successors.PopBeg()    // Remove the actual successor.
 			suc = node.successors.Beg() // Take the next successor in queue.
 			node.sucLock.Unlock()
-			log.Error(err.Error() + "Successor failed.\n")
+			log.Error("Successor failed.\n" + err.Error() + "\n")
 		} else {
 			// If successor is alive, return.
 			log.Debug("Successor alive.\n")
@@ -533,7 +533,7 @@ func (node *Node) CheckSuccessor() {
 	// Transfer the keys to the new successor, to update it.
 	err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 	if err != nil {
-		log.Error(err.Error() + "Error transferring keys to the new successor.\n")
+		log.Error("Error transferring keys to the new successor.\n" + err.Error() + "\n")
 		return
 	}
 	log.Info("Successful transfer of keys to the new successor.\n")
