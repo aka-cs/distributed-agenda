@@ -56,6 +56,8 @@ type GRPCServices struct {
 
 // NewGRPCServices creates a new GRPCServices object.
 func NewGRPCServices(config *Configuration) *GRPCServices {
+	log.Info("Creating transport layer interface.\n")
+
 	// Create the GRPCServices object.
 	services := &GRPCServices{
 		Configuration: config,
@@ -63,6 +65,7 @@ func NewGRPCServices(config *Configuration) *GRPCServices {
 		shutdown:      nil,
 	}
 
+	log.Info("Transport layer interface created.\n")
 	// Return the GRPCServices object.
 	return services
 }
@@ -71,6 +74,8 @@ func NewGRPCServices(config *Configuration) *GRPCServices {
 
 // Start the services.
 func (services *GRPCServices) Start() error {
+	log.Info("Starting transport layer services...\n")
+
 	// If transport layer services are actually running, report error.
 	if IsOpen(services.shutdown) {
 		message := "Error starting services: transport layer services are actually running.\n"
@@ -79,7 +84,6 @@ func (services *GRPCServices) Start() error {
 	}
 
 	services.shutdown = make(chan struct{}) // Report the services are running.
-	log.Info("Starting transport layer services...\n")
 
 	services.connections = make(map[string]*RemoteNode) // Create the dictionary of <address, open connection>.
 	// Start periodically threads.
@@ -92,6 +96,8 @@ func (services *GRPCServices) Start() error {
 // Stop the services, by reporting the transport layer services are now shutdown,
 // to make the periodic threads stop themselves eventually.
 func (services *GRPCServices) Stop() error {
+	log.Info("Stopping transport layer services...\n")
+
 	// If transport layer services are not actually running, report error.
 	if !IsOpen(services.shutdown) {
 		message := "Error stopping services: transport layer services are actually shutdown.\n"
@@ -99,17 +105,20 @@ func (services *GRPCServices) Stop() error {
 		return errors.New(message)
 	}
 
-	log.Info("Closing server...\n")
 	close(services.shutdown) // Report the services are shutdown.
-	log.Info("Transport layer services closed.\n")
+	log.Info("Transport layer services stopped.\n")
 	return nil
 }
 
 // Connect with a remote address.
 func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
+	log.Info("Connecting to address " + addr + ".\n")
+
 	// Check if the service is shutdown, and if condition holds return and report it.
 	if !IsOpen(services.shutdown) {
-		return nil, errors.New("Error creating connection: must start grpc services first.\n")
+		message := "Error creating connection: must start transport layer services first.\n"
+		log.Error(message)
+		return nil, errors.New(message)
 	}
 
 	services.connectionsMtx.RLock() // Lock the dictionary to read it, and unlock it after.
@@ -132,7 +141,7 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 	if err != nil {
 		message := "Error creating connection.\n"
 		log.Error(message)
-		return nil, errors.New(err.Error() + message)
+		return nil, errors.New(message + err.Error())
 	}
 
 	client := chord.NewChordClient(conn) // Create the ChordClient associated with the connection.
@@ -152,6 +161,8 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 
 // CloseOldConnections close the old open connections.
 func (services *GRPCServices) CloseOldConnections() {
+	log.Debug("Closing old connections.\n")
+
 	// If the service is shutdown, close all the connections and return.
 	if !IsOpen(services.shutdown) {
 		services.connectionsMtx.Lock() // Lock the dictionary to write on it, and unlock it after.
@@ -182,6 +193,7 @@ func (services *GRPCServices) CloseOldConnections() {
 		}
 	}
 	services.connectionsMtx.Unlock()
+	log.Debug("Old connections closed.\n")
 }
 
 // PeriodicallyCloseConnections periodically close the old open connections.
