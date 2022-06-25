@@ -138,14 +138,14 @@ func (node *Node) Start() error {
 // It is not necessary to deal with the transfer of keys for the maintenance of replication,
 // since the methods used to connect the nodes (SetSuccessor and SetPredecessor) will take care of this.
 func (node *Node) Stop() error {
+	log.Info("Closing server...\n")
+
 	// If node server is not actually running, report error.
 	if !IsOpen(node.shutdown) {
 		message := "Error stopping server: this node server is actually shutdown.\n"
 		log.Error(message)
 		return errors.New(message)
 	}
-
-	log.Info("Closing server...\n")
 
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
@@ -179,12 +179,12 @@ func (node *Node) Stop() error {
 
 	err := node.RPC.Stop() // Stop the RPC (transport layer) services.
 	if err != nil {
-		message := "Error stopping server.\n"
+		message := "Error stopping server: cannot stop the transport layer.\n"
 		log.Error(message)
 		return errors.New(err.Error() + "\n" + message)
 	}
 
-	node.server.Stop()
+	node.server.Stop()     // Stop serving at the opened socket.
 	node.successors = nil  // Delete the successors queue.
 	node.fingerTable = nil // Delete the finger table.
 	node.dictionary = nil  // Delete the node dictionary.
