@@ -707,15 +707,17 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 		dictionary, err := node.dictionary.Segment(nil, pred.ID)
 		node.dictLock.RUnlock()
 		if err != nil {
-			log.Error("Error obtaining predecessor keys.\n")
-			return emptyResponse, nil
+			message := "Error obtaining predecessor keys.\n"
+			log.Error(message)
+			return nil, errors.New(message + err.Error())
 		}
 
 		// Transfer the old predecessor keys to this node successor.
 		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
-			log.Error(err.Error() + "Error transferring keys to successor.\n")
-			return emptyResponse, nil
+			message := "Error transferring keys to successor.\n"
+			log.Error(message)
+			return nil, errors.New(message + err.Error())
 		}
 		log.Info("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
 	}
@@ -759,15 +761,17 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 		dictionary, err := node.dictionary.Segment(predID, nil) // Obtain this node keys.
 		node.dictLock.RUnlock()
 		if err != nil {
-			log.Error("Error obtaining this node keys.\n")
-			return emptyResponse, nil
+			message := "Error obtaining this node keys.\n"
+			log.Error(message)
+			return nil, errors.New(message + err.Error())
 		}
 
 		// Transfer this node keys to the new successor, to update it.
 		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
-			log.Error(err.Error() + "Error transferring keys to the new successor.\n")
-			return emptyResponse, nil
+			message := "Error transferring keys to the new successor.\n"
+			log.Error(message)
+			return nil, errors.New(message + err.Error())
 		}
 		log.Info("Successful transfer of keys to the new successor.\n")
 	}
@@ -818,7 +822,8 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		dictionary, err := node.dictionary.Segment(nil, new.ID) // Obtain the keys to transfer.
 		node.dictLock.RUnlock()
 		if err != nil {
-			message := "Error obtaining the new predecessor its corresponding keys.\n"
+			message := "Error obtaining the new predecessor corresponding keys.\n"
+			log.Error(message)
 			return nil, errors.New(message + err.Error())
 		}
 
@@ -826,6 +831,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
 			message := "Error transferring keys to the new predecessor.\n"
+			log.Error(message)
 			return nil, errors.New(message + err.Error())
 		}
 
@@ -833,6 +839,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		err = node.RPC.Discard(suc, &chord.DiscardRequest{L: nil, R: new.ID})
 		if err != nil {
 			message := "Error deleting replicated keys on the successor.\n"
+			log.Error(message)
 			return nil, errors.New(message + err.Error())
 		}
 
@@ -844,9 +851,11 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 			node.dictLock.Unlock()
 			if err != nil {
 				message := "Error deleting old predecessor keys on this node.\n"
+				log.Error(message)
 				return nil, errors.New(message + err.Error())
 			}
 		}
+		log.Debug("Predecessor updated.\n")
 	}
 
 	return emptyResponse, nil
