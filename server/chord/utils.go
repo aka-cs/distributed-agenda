@@ -78,7 +78,7 @@ func Between(ID, L, R []byte, includeL, includeR bool) bool {
 }
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {
-	log.Debug("Hashing key: " + key + ".\n")
+	log.Trace("Hashing key: " + key + ".\n")
 	h := hash()
 	if _, err := h.Write([]byte(key)); err != nil {
 		log.Error("Error hashing key " + key + ": " + err.Error() + ".\n")
