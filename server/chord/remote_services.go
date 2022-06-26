@@ -112,7 +112,7 @@ func (services *GRPCServices) Stop() error {
 
 // Connect with a remote address.
 func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
-	log.Info("Connecting to address " + addr + ".\n")
+	log.Debug("Connecting to address " + addr + ".\n")
 
 	// Check if the service is shutdown, and if condition holds return and report it.
 	if !IsOpen(services.shutdown) {
@@ -134,6 +134,7 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 
 	// Check if the connection is already alive, and if condition holds return the connection.
 	if ok {
+		log.Debug("Successful connection (connection already exists).\n")
 		return remoteNode, nil
 	}
 
@@ -155,6 +156,7 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 	services.connections[addr] = remoteNode
 	services.connectionsMtx.Unlock()
 
+	log.Debug("Successful connection.\n")
 	// Return the correspondent RemoteNode.
 	return remoteNode, nil
 }

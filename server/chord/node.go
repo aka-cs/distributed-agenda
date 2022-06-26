@@ -93,10 +93,10 @@ func (node *Node) Start() error {
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 
 	// Start listening at correspondent address.
-	log.Info("Trying to listen at correspondent node address.\n")
+	log.Info("Trying to listen at the correspondent address.\n")
 	listener, err := net.Listen("tcp", node.Address)
 	if err != nil {
-		message := "Error starting server: cannot listen at address " + node.Address + ".\n"
+		message := "Error starting server: cannot listen at the address " + node.Address + ".\n"
 		log.Error(message)
 		return errors.New(message + err.Error())
 	}
@@ -197,7 +197,7 @@ func (node *Node) Stop() error {
 
 // Listen for inbound connections
 func (node *Node) Listen() {
-	log.Info("Start serving at opened socket.\n")
+	log.Info("Start serving at the opened socket.\n")
 	err := node.server.Serve(node.sock)
 	if err != nil {
 		log.Error("Cannot serve at " + node.Address + ".\n" + err.Error() + "\n")
@@ -211,12 +211,12 @@ func (node *Node) Listen() {
 // The keys corresponding to this node will be transferred by its successor, from the Notify
 // method that is called at the end of this method.
 func (node *Node) Join(knownNode *chord.Node) error {
-	log.Info("Joining new node to chord ring.\n")
+	log.Info("Joining to chord ring.\n")
 
 	// If the known node is null, return error: to join this node to the ring,
 	// at least one node of the ring must be known.
 	if knownNode == nil {
-		message := "Error joining node to chord ring: known node cannot be null.\n"
+		message := "Error joining to chord ring: known node cannot be null.\n"
 		log.Error(message)
 		return errors.New(message)
 	}
@@ -225,13 +225,13 @@ func (node *Node) Join(knownNode *chord.Node) error {
 
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID) // Find the immediate successor of this node ID.
 	if err != nil {
-		message := "Error joining node to chord ring: cannot find successor of this node ID.\n"
+		message := "Error joining to chord ring: cannot find successor of this node ID.\n"
 		log.Error(message + err.Error() + "\n")
 		return errors.New(message + err.Error())
 	}
 	// If the obtained node ID is this node ID, then this node is already on the ring.
 	if Equals(suc.ID, node.ID) {
-		message := "Error joining node to chord ring: a node with this ID already exists.\n"
+		message := "Error joining to chord ring: a node with this ID already exists.\n"
 		log.Error(message)
 		return errors.New(message)
 	}
@@ -244,7 +244,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	}
 	node.successors.PushBeg(suc) // Update this node successor with the obtained node.
 	node.sucLock.Unlock()
-	log.Info("Successful join of the node.\n")
+	log.Info("Successful join.\n")
 	return nil
 }
 
@@ -342,7 +342,8 @@ func (node *Node) Stabilize() {
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
 	if err != nil {
-		log.Error("Error stabilizing node.\n" + err.Error() + "\n")
+		log.Error("Error stabilizing node.\nCannot get predecessor of successor.\n" + err.Error() + "\n")
+		return
 	}
 
 	// If candidate is not null, and it's closer to this node than its current successor,
@@ -355,12 +356,13 @@ func (node *Node) Stabilize() {
 			node.successors.PopBack()
 		}
 		node.successors.PushBeg(candidate) // Update this node successor with the obtained node.
+		suc = candidate
 		node.sucLock.Unlock()
 	}
 
 	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
 	if err != nil {
-		log.Error("Error stabilizing node.\n" + err.Error() + "\n")
+		log.Error("Error stabilizing node.\nError notifying successor.\n" + err.Error() + "\n")
 		return
 	}
 	log.Debug("Node stabilized.\n")
@@ -870,7 +872,7 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
-	log.Debug("Getting key associated value.\n")
+	log.Info("Getting key associated value.\n")
 
 	// If the get request is null, report error.
 	if req == nil {
@@ -906,6 +908,8 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 	// If the node that stores the key is this node, directly get the associated value from this node storage.
 	if Equals(keyNode.ID, node.ID) {
+		log.Info("Resolving get request locally.\n")
+
 		node.dictLock.RLock()                      // Lock the dictionary to read it, and unlock it after.
 		value, err := node.dictionary.Get(req.Key) // Get the value associated to this key from storage.
 		node.dictLock.RUnlock()
@@ -914,8 +918,11 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 			log.Error(message)
 			return nil, errors.New(message + err.Error())
 		}
+		log.Info("Successful get.\n")
 		// Return the value associated to this key.
 		return &chord.GetResponse{Value: value}, nil
+	} else {
+		log.Info("Redirecting get request to " + keyNode.Address + ".\n")
 	}
 	// Otherwise, return the result of the remote call on the correspondent node.
 	return node.RPC.Get(keyNode, req)
@@ -923,7 +930,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
-	log.Debug("Setting a <key, value> pair.\n")
+	log.Info("Setting a <key, value> pair.\n")
 
 	// If the get request is null, report error.
 	if req == nil {
@@ -936,9 +943,13 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 	// If this request is a replica, resolve it local.
 	if req.Replica {
+		log.Info("Resolving set request locally (replication).\n")
+
 		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
 		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
+
+		log.Info("Successful set.\n")
 		return emptyResponse, nil
 	}
 
@@ -960,19 +971,21 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	if pred == nil || Between(keyID, pred.ID, node.ID, false, true) {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node to which that key corresponds.
 		if err != nil {
-			if err != nil {
-				message := "Error setting key.\n"
-				log.Error(message)
-				return nil, errors.New(message + err.Error())
-			}
+			message := "Error setting key.\n"
+			log.Error(message)
+			return nil, errors.New(message + err.Error())
 		}
 	}
 
 	// If the key corresponds to this node, directly set the <key, value> pair on its storage.
 	if Equals(keyNode.ID, node.ID) {
+		log.Info("Resolving set request locally.\n")
+
 		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
 		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
+
+		log.Info("Successful set.\n")
 
 		node.sucLock.RLock() // Lock the successor to read it, and unlock it after.
 		suc := node.successors.Beg()
@@ -981,18 +994,22 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		// If successor is not null, replicate the request to it.
 		if suc != nil {
 			req.Replica = true
+			log.Info("Replicating set request to " + keyNode.Address + ".\n")
 			return emptyResponse, node.RPC.Set(suc, req)
 		}
 		// Else, return.
 		return emptyResponse, nil
+	} else {
+		log.Info("Redirecting set request to " + keyNode.Address + ".\n")
 	}
+
 	// Otherwise, return the result of the remote call on the correspondent node.
 	return emptyResponse, node.RPC.Set(keyNode, req)
 }
 
 // Delete a <key, value> pair from storage.
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
-	log.Debug("Deleting a <key, value> pair.\n")
+	log.Info("Deleting a <key, value> pair.\n")
 
 	// If the get request is null, report error.
 	if req == nil {
@@ -1005,9 +1022,13 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 	// If this request is a replica, resolve it local.
 	if req.Replica {
+		log.Info("Resolving delete request locally (replication).\n")
+
 		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
 		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
+
+		log.Info("Successful delete.\n")
 		return emptyResponse, nil
 	}
 
@@ -1037,9 +1058,13 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 	// If the key corresponds to this node, directly delete the <key, value> pair from its storage.
 	if Equals(keyNode.ID, node.ID) {
+		log.Info("Resolving delete request locally.\n")
+
 		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it at the end of function.
 		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
+
+		log.Info("Successful delete.\n")
 
 		node.sucLock.RLock() // Lock the successor to read it, and unlock it after.
 		suc := node.successors.Beg()
@@ -1048,11 +1073,15 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 		// If successor is not null, replicate the request to it.
 		if suc != nil {
 			req.Replica = true
+			log.Info("Replicating delete request to " + keyNode.Address + ".\n")
 			return emptyResponse, node.RPC.Delete(suc, req)
 		}
 		// Else, return.
 		return emptyResponse, nil
+	} else {
+		log.Info("Redirecting delete request to " + keyNode.Address + ".\n")
 	}
+
 	// Otherwise, return the result of the remote call on the correspondent node.
 	return emptyResponse, node.RPC.Delete(keyNode, req)
 }
