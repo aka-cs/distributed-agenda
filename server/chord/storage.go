@@ -59,7 +59,7 @@ func (dictionary *Dictionary) Segment(L, R []byte) (map[string][]byte, error) {
 	}
 
 	for key, keyID := range keyIDs {
-		if Between(keyID, L, R, false, false) {
+		if Between(keyID, L, R, false, true) {
 			data[key] = dictionary.data[key]
 		}
 	}
@@ -89,7 +89,7 @@ func (dictionary *Dictionary) Discard(L, R []byte) error {
 	}
 
 	for key, keyID := range keyIDs {
-		if Between(keyID, L, R, false, false) {
+		if Between(keyID, L, R, false, true) {
 			delete(dictionary.data, key)
 		}
 	}

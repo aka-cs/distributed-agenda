@@ -1,5 +1,7 @@
 package chord
 
+import log "github.com/sirupsen/logrus"
+
 type Queue[T any] struct {
 	first    *QueueNode[T]
 	last     *QueueNode[T]
@@ -37,6 +39,7 @@ func (queue *Queue[T]) PushBeg(value *T) {
 
 func (queue *Queue[T]) PopBeg() *T {
 	if queue.size == 0 {
+		log.Error("Cannot pop: queue empty.\n")
 		return nil
 	}
 
@@ -74,6 +77,7 @@ func (queue *Queue[T]) PushBack(value *T) {
 
 func (queue *Queue[T]) PopBack() *T {
 	if queue.size == 0 {
+		log.Error("Cannot pop: queue empty.\n")
 		return nil
 	}
 

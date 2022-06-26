@@ -64,14 +64,17 @@ func Between(ID, L, R []byte, includeL, includeR bool) bool {
 		return true
 	}
 
+	greater := bytes.Compare(L, ID) < 0 || L == nil
+	lower := 0 < bytes.Compare(R, ID) || R == nil
+
 	// If L < R, return true if L < ID < R.
 	if bytes.Compare(L, R) < 0 {
-		return (bytes.Compare(L, ID) < 0 || L == nil) && (0 < bytes.Compare(R, ID) || R == nil)
+		return greater && lower
 	}
 
 	// If L >= R, this is a segment over the end of the ring.
 	// So, ID is between L and R if L < ID or ID < R.
-	return (bytes.Compare(L, ID) < 0 || L == nil) || (0 < bytes.Compare(R, ID) || R == nil)
+	return greater || lower
 }
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {
