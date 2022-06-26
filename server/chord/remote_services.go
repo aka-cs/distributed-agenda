@@ -112,7 +112,7 @@ func (services *GRPCServices) Stop() error {
 
 // Connect with a remote address.
 func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
-	log.Debug("Connecting to address " + addr + ".\n")
+	log.Trace("Connecting to address " + addr + ".\n")
 
 	// Check if the service is shutdown, and if condition holds return and report it.
 	if !IsOpen(services.shutdown) {
@@ -134,7 +134,7 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 
 	// Check if the connection is already alive, and if condition holds return the connection.
 	if ok {
-		log.Debug("Successful connection (connection already exists).\n")
+		log.Trace("Successful connection (connection already exists).\n")
 		return remoteNode, nil
 	}
 
@@ -156,14 +156,14 @@ func (services *GRPCServices) Connect(addr string) (*RemoteNode, error) {
 	services.connections[addr] = remoteNode
 	services.connectionsMtx.Unlock()
 
-	log.Debug("Successful connection.\n")
+	log.Trace("Successful connection.\n")
 	// Return the correspondent RemoteNode.
 	return remoteNode, nil
 }
 
 // CloseOldConnections close the old open connections.
 func (services *GRPCServices) CloseOldConnections() {
-	log.Debug("Closing old connections.\n")
+	log.Trace("Closing old connections.\n")
 
 	// If the service is shutdown, close all the connections and return.
 	if !IsOpen(services.shutdown) {
@@ -195,7 +195,7 @@ func (services *GRPCServices) CloseOldConnections() {
 		}
 	}
 	services.connectionsMtx.Unlock()
-	log.Debug("Old connections closed.\n")
+	log.Trace("Old connections closed.\n")
 }
 
 // PeriodicallyCloseConnections periodically close the old open connections.
