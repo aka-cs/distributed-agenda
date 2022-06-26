@@ -533,7 +533,7 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	// Otherwise, report that there is a new successor.
-	log.Info("Successor updated.\n")
+	log.Debug("Successor updated.\n")
 
 	// Transfer this node keys to the new successor.
 	// Lock the dictionary to read it, and unlock it after.
@@ -551,7 +551,7 @@ func (node *Node) CheckSuccessor() {
 		log.Error("Error transferring keys to the new successor.\n" + err.Error() + "\n")
 		return
 	}
-	log.Info("Successful transfer of keys to the new successor.\n")
+	log.Debug("Successful transfer of keys to the new successor.\n")
 }
 
 // PeriodicallyCheckSuccessor periodically checks whether successor has failed.

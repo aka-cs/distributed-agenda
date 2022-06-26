@@ -32,8 +32,8 @@ func NewFingerTable(node *chord.Node, size int) FingerTable {
 
 // ClosestFinger find the closest finger preceding this ID.
 func (node *Node) ClosestFinger(ID []byte) *chord.Node {
-	log.Debug("Finding the closest finger preceding this ID.\n")
-	defer log.Debug("Closest finger found.\n")
+	log.Trace("Finding the closest finger preceding this ID.\n")
+	defer log.Trace("Closest finger found.\n")
 
 	// Iterate the finger table in reverse, and return the first finger
 	// such that the finger ID is between this node ID and the parameter ID.
@@ -49,7 +49,7 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 
 // FixFinger update a particular finger on the finger table, and return the index of the next finger to update.
 func (node *Node) FixFinger(index int) int {
-	log.Debug("Fixing finger entry.\n")
+	log.Trace("Fixing finger entry.\n")
 
 	m := node.config.HashSize            // Obtain the finger table size.
 	ID := FingerID(node.ID, index, m)    // Obtain n + 2^(next) mod (2^m).
