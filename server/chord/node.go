@@ -178,7 +178,7 @@ func (node *Node) Stop() error {
 		// Change the predecessor of this node successor to this node predecessor.
 		err := node.RPC.SetPredecessor(suc, pred)
 		if err != nil {
-			message := "Error stopping server: error setting new predecessor of this node successor.\n"
+			message := "Error stopping server: error setting new predecessor of successor at " + suc.Address + ".\n"
 			log.Error(message)
 			return errors.New(message + err.Error())
 		}
@@ -186,7 +186,7 @@ func (node *Node) Stop() error {
 		// Change the successor of this node predecessor to this node successor.
 		err = node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
-			message := "Error stopping server: error setting new successor of this node predecessor.\n"
+			message := "Error stopping server: error setting new successor of predecessor at " + pred.Address + ".\n"
 			log.Error(message)
 			return errors.New(message + err.Error())
 		}
@@ -363,8 +363,8 @@ func (node *Node) Stabilize() {
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
 	if err != nil {
-		log.Error("Error stabilizing node.\nCannot get predecessor of successor at " +
-			suc.Address + ".\n" + err.Error() + "\n")
+		message := "Error stabilizing node.\nCannot get predecessor of successor at " + suc.Address + ".\n"
+		log.Error(message + err.Error() + "\n")
 		return
 	}
 
@@ -380,8 +380,8 @@ func (node *Node) Stabilize() {
 
 	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
 	if err != nil {
-		log.Error("Error stabilizing node.\nError notifying successor at " +
-			suc.Address + ".\n" + err.Error() + "\n")
+		message := "Error stabilizing node.\nError notifying successor at " + suc.Address + ".\n"
+		log.Error(message + err.Error() + "\n")
 		return
 	}
 	log.Trace("Node stabilized.\n")
@@ -511,7 +511,7 @@ func (node *Node) CheckSuccessor() {
 			node.successors.PushBack(node.Node) // Push back this node, to ensure the queue is not empty.
 			suc = node.successors.Beg()         // Take the next successor in queue.
 			node.sucLock.Unlock()
-			log.Error("Successor failed.\n" + err.Error() + "\n")
+			log.Error("Successor at " + suc.Address + " failed.\n" + err.Error() + "\n")
 		} else {
 			// If successor is alive, return.
 			log.Trace("Successor alive.\n")
@@ -535,7 +535,7 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	// Otherwise, report that there is a new successor.
-	log.Debug("Successor updated.\n")
+	log.Debug("Successor updated with the node at " + suc.Address + ".\n")
 
 	// Transfer this node keys to the new successor.
 	// Lock the dictionary to read it, and unlock it after.
@@ -602,8 +602,9 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 	suc, err := node.RPC.GetSuccessor(value) // Otherwise, get the successor of this successor.
 	// If there is an error, then assume this successor is dead.
 	if err != nil {
-		log.Error("Error getting successor of this successor.\n" +
-			"Therefore is assumed dead and removed from the queue of successors.\n" + err.Error() + "\n")
+		message := "Error getting successor of successor at " + suc.Address + ".\n" +
+			"Therefore is assumed dead and removed from the queue of successors.\n"
+		log.Error(message + err.Error() + "\n")
 
 		node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
 		node.successors.Remove(entry) // Remove it from the descendents queue.
@@ -739,7 +740,7 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 		// Transfer the old predecessor keys to this node successor.
 		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
-			message := "Error transferring keys to successor.\n"
+			message := "Error transferring keys to successor at " + suc.Address + ".\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
@@ -778,7 +779,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 		// Transfer this node keys to the new successor, to update it.
 		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
-			message := "Error transferring keys to the new successor.\n"
+			message := "Error transferring keys to the new successor at " + candidate.Address + ".\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
@@ -806,7 +807,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 	// If this node has no predecessor or the predecessor candidate is closer to this node
 	// than its current predecessor, update this node predecessor with the candidate.
 	if Between(new.ID, pred.ID, node.ID, false, false) {
-		log.Debug("Updating predecessor.\n")
+		log.Debug("Updating predecessor with node at " + new.Address + ".\n")
 
 		// Lock the predecessor to write on it, and unlock it after.
 		node.predLock.Lock()
@@ -827,7 +828,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		// Build the new predecessor dictionary, by transferring its correspondent keys.
 		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
 		if err != nil {
-			message := "Error transferring keys to the new predecessor.\n"
+			message := "Error transferring keys to the new predecessor at " + new.Address + ".\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
@@ -841,7 +842,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		if !Equals(suc.ID, node.ID) {
 			err = node.RPC.Discard(suc, &chord.DiscardRequest{L: nil, R: new.ID})
 			if err != nil {
-				message := "Error deleting replicated keys on the successor.\n"
+				message := "Error deleting replicated keys on the successor at " + new.Address + ".\n"
 				log.Error(message)
 				return emptyResponse, errors.New(message + err.Error())
 			}
