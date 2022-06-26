@@ -79,8 +79,8 @@ func (node *Node) FixFinger(index int) int {
 func (node *Node) PeriodicallyFixFinger() {
 	log.Debug("Fix finger thread started.\n")
 
-	next := 0                                  // Index of the actual finger entry to fix.
-	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	next := 0                                        // Index of the actual finger entry to fix.
+	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:

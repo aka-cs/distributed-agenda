@@ -391,7 +391,7 @@ func (node *Node) Stabilize() {
 func (node *Node) PeriodicallyStabilize() {
 	log.Debug("Stabilize thread started.\n")
 
-	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
@@ -560,7 +560,7 @@ func (node *Node) CheckSuccessor() {
 func (node *Node) PeriodicallyCheckSuccessor() {
 	log.Debug("Check successor thread started.\n")
 
-	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
@@ -646,8 +646,8 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 func (node *Node) PeriodicallyFixDescendant() {
 	log.Debug("Fix descendant thread started.\n")
 
-	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
-	var entry *QueueNode[chord.Node] = nil     // Queue node entry for iterations.
+	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
+	var entry *QueueNode[chord.Node] = nil    // Queue node entry for iterations.
 
 	for {
 		select {
