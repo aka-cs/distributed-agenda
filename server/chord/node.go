@@ -363,7 +363,8 @@ func (node *Node) Stabilize() {
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
 	if err != nil {
-		log.Error("Error stabilizing node.\nCannot get predecessor of successor.\n" + err.Error() + "\n")
+		log.Error("Error stabilizing node.\nCannot get predecessor of successor at " +
+			suc.Address + ".\n" + err.Error() + "\n")
 		return
 	}
 
@@ -379,7 +380,8 @@ func (node *Node) Stabilize() {
 
 	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
 	if err != nil {
-		log.Error("Error stabilizing node.\nError notifying successor.\n" + err.Error() + "\n")
+		log.Error("Error stabilizing node.\nError notifying successor at " +
+			suc.Address + ".\n" + err.Error() + "\n")
 		return
 	}
 	log.Trace("Node stabilized.\n")
@@ -420,8 +422,8 @@ func (node *Node) CheckPredecessor() {
 		err := node.RPC.Check(pred)
 		// In case of error, assume predecessor is not alive, and set this node predecessor to this node.
 		if err != nil {
-			log.Error("Predecessor failed.\n" + err.Error() + "\n")
-			log.Trace("Absorbing predecessor's keys.\n")
+			log.Error("Predecessor at " + pred.Address + " failed.\n" + err.Error() + "\n")
+			log.Debug("Absorbing predecessor's keys.\n")
 
 			// Lock the predecessor to write on it, and unlock it after.
 			node.predLock.Lock()
@@ -450,7 +452,7 @@ func (node *Node) CheckPredecessor() {
 					log.Error(err.Error() + "Error transferring keys to successor.\n")
 					return
 				}
-				log.Trace("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
+				log.Debug("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
 			}
 		} else {
 			log.Trace("Predecessor alive.\n")
@@ -533,7 +535,7 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	// Otherwise, report that there is a new successor.
-	log.Trace("Successor updated.\n")
+	log.Debug("Successor updated.\n")
 
 	// Transfer this node keys to the new successor.
 	// Lock the dictionary to read it, and unlock it after.
@@ -551,7 +553,7 @@ func (node *Node) CheckSuccessor() {
 		log.Error("Error transferring keys to the new successor.\n" + err.Error() + "\n")
 		return
 	}
-	log.Trace("Successful transfer of keys to the new successor.\n")
+	log.Debug("Successful transfer of keys to the new successor.\n")
 }
 
 // PeriodicallyCheckSuccessor periodically checks whether successor has failed.
@@ -804,7 +806,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 	// If this node has no predecessor or the predecessor candidate is closer to this node
 	// than its current predecessor, update this node predecessor with the candidate.
 	if Between(new.ID, pred.ID, node.ID, false, false) {
-		log.Trace("Updating predecessor.\n")
+		log.Debug("Updating predecessor.\n")
 
 		// Lock the predecessor to write on it, and unlock it after.
 		node.predLock.Lock()
@@ -857,7 +859,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 				return emptyResponse, errors.New(message + err.Error())
 			}
 		}
-		log.Trace("Predecessor updated.\n")
+		log.Debug("Predecessor updated.\n")
 	}
 
 	return emptyResponse, nil
