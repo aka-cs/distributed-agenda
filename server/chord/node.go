@@ -1,10 +1,12 @@
 package chord
 
 import (
+	"bytes"
 	"errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"math/big"
 	"net"
 	"server/chord/chord"
 	"sync"
@@ -102,27 +104,13 @@ func (node *Node) Start() error {
 	}
 	log.Debug("Listening at " + node.Address + ".\n")
 
-	// Initialize the node fields.
-	// Lock the queue of successors to write on it, and unlock it after.
-	node.sucLock.Lock()
 	node.successors = NewQueue[chord.Node](node.config.StabilizingNodes) // Create the successors queue.
 	node.successors.PushBack(node.Node)                                  // Set this node as its own successor.
-	node.sucLock.Unlock()
-	// Lock the predecessor to write on it, and unlock it after.
-	node.predLock.Lock()
-	node.predecessor = node.Node // Set this node as it own predecessor.
-	node.predLock.Unlock()
-	// Lock the finger table to write on it, and unlock it after.
-	node.fingerLock.Lock()
-	node.fingerTable = NewFingerTable(node.Node, node.config.HashSize) // Create the finger table.
-	node.fingerLock.Unlock()
-	// Lock the storage dictionary to write on it, and unlock it after.
-	node.dictLock.Lock()
-	node.dictionary = NewDictionary(node.config.Hash) // Create the node dictionary.
-	node.dictLock.Unlock()
-	// Create the server and its correspondent socket.
-	node.server = grpc.NewServer(node.config.ServerOpts...) // Create the node server.
-	node.sock = listener.(*net.TCPListener)                 // Save the socket.
+	node.predecessor = node.Node                                         // Set this node as it own predecessor.
+	node.fingerTable = NewFingerTable(node.config.HashSize)              // Create the finger table.
+	node.dictionary = NewDictionary(node.config.Hash)                    // Create the node dictionary.
+	node.server = grpc.NewServer(node.config.ServerOpts...)              // Create the node server.
+	node.sock = listener.(*net.TCPListener)                              // Save the socket.
 
 	chord.RegisterChordServer(node.server, node) // Register the node server as a chord server.
 	log.Debug("Chord services registered.\n")
@@ -289,9 +277,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	}
 
 	// Look on the FingerTable to found the closest finger with ID lower than this ID.
-	node.fingerLock.RLock()        // Lock the FingerTable to read it, and unlock it after.
-	pred := node.ClosestFinger(id) // Find the successor of this ID in the FingerTable.
-	node.fingerLock.RUnlock()
+	pred := node.ClosestFinger(id)
 
 	// If the corresponding finger is this node, return this node successor.
 	if Equals(pred.ID, node.ID) {
@@ -307,6 +293,37 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	suc, err := node.RPC.FindSuccessor(pred, id)
 	if err != nil {
 		message := "Error finding ID successor from finger at " + pred.Address + ".\n"
+
+		ID := big.Int{}
+		ID.SetBytes(id)
+		nodeID := big.Int{}
+		nodeID.SetBytes(node.ID)
+		predID := big.Int{}
+		predID.SetBytes(pred.ID)
+
+		message += ID.String() + "\n" + nodeID.String() + "\n" + predID.String() + "\n"
+		if Between(pred.ID, node.ID, id, false, true) {
+			message += "YES\n"
+
+			if bytes.Compare(node.ID, pred.ID) < 0 {
+				message += "1\n"
+			}
+			if 0 < bytes.Compare(id, pred.ID) {
+				message += "2\n"
+			}
+		}
+		if Between(node.ID, pred.ID, id, false, true) {
+			message += "YES TOO\n"
+
+			if bytes.Compare(pred.ID, node.ID) < 0 {
+				message += "3\n"
+			}
+			if 0 < bytes.Compare(id, node.ID) {
+				message += "4\n"
+			}
+		}
+		message += pred.Address + " " + node.Address + "\n"
+
 		log.Error(message + err.Error() + "\n")
 		return nil, errors.New(message + err.Error())
 	}
@@ -611,7 +628,7 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 	suc, err := node.RPC.GetSuccessor(value) // Otherwise, get the successor of this successor.
 	// If there is an error, then assume this successor is dead.
 	if err != nil {
-		message := "Error getting successor of successor at " + suc.Address + ".\n" +
+		message := "Error getting successor of successor at " + value.Address + ".\n" +
 			"Therefore is assumed dead and removed from the queue of successors.\n"
 		log.Error(message + err.Error() + "\n")
 

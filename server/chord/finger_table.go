@@ -13,15 +13,15 @@ type Finger struct {
 }
 
 // FingerTable definition.
-type FingerTable []Finger
+type FingerTable []*Finger
 
 // NewFingerTable creates and return a new FingerTable.
-func NewFingerTable(node *chord.Node, size int) FingerTable {
-	hand := make([]Finger, size) // Build the new array of fingers.
+func NewFingerTable(size int) FingerTable {
+	hand := make([]*Finger, size) // Build the new array of fingers.
 
 	// Build and then add the necessary fingers to the array.
 	for i := range hand {
-		hand[i] = Finger{FingerID(node.ID, i, size), node}
+		hand[i] = nil
 	}
 
 	// Return the FingerTable.
@@ -38,8 +38,12 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 	// Iterate the finger table in reverse, and return the first finger
 	// such that the finger ID is between this node ID and the parameter ID.
 	for i := len(node.fingerTable) - 1; i >= 0; i-- {
-		if Between(node.fingerTable[i].ID, node.ID, ID, false, true) {
-			return node.fingerTable[i].Node
+		node.fingerLock.RLock()
+		finger := node.fingerTable[i]
+		node.fingerLock.RUnlock()
+
+		if finger != nil && Between(finger.Node.ID, node.ID, ID, false, true) {
+			return finger.Node
 		}
 	}
 
@@ -66,7 +70,7 @@ func (node *Node) FixFinger(index int) int {
 		return 0
 	}
 
-	finger := Finger{ID, suc}        // Create the correspondent finger with the obtained node.
+	finger := &Finger{ID, suc}       // Create the correspondent finger with the obtained node.
 	node.fingerLock.Lock()           // Lock finger table to write on it, and unlock it after.
 	node.fingerTable[index] = finger // Update the correspondent position on the finger table.
 	node.fingerLock.Unlock()
@@ -79,8 +83,8 @@ func (node *Node) FixFinger(index int) int {
 func (node *Node) PeriodicallyFixFinger() {
 	log.Debug("Fix finger thread started.\n")
 
-	next := 0                                         // Index of the actual finger entry to fix.
-	ticker := time.NewTicker(1000 * time.Millisecond) // Set the time between routine activations.
+	next := 0                                        // Index of the actual finger entry to fix.
+	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
