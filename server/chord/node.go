@@ -614,6 +614,12 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 		return nil
 	}
 
+	// If the queue node is not inside the queue, return the next node.
+	if !entry.inside {
+		log.Trace("Successor queue entry fixed.\n")
+		return entry.next
+	}
+
 	node.sucLock.RLock()                     // Lock the queue to read it, and unlock it after.
 	last := entry == node.successors.last    // Verify if this queue node is the last one.
 	fulfilled := node.successors.Fulfilled() // Verify if the queue of successors of this node is fulfilled.

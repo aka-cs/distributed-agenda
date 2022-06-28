@@ -10,9 +10,10 @@ type Queue[T any] struct {
 }
 
 type QueueNode[T any] struct {
-	value *T
-	prev  *QueueNode[T]
-	next  *QueueNode[T]
+	value  *T
+	prev   *QueueNode[T]
+	next   *QueueNode[T]
+	inside bool
 }
 
 func NewQueue[T any](capacity int) *Queue[T] {
@@ -27,12 +28,12 @@ func (queue *Queue[T]) PushBeg(value *T) {
 	queue.size++
 
 	if queue.size == 1 {
-		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil}
+		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil, inside: true}
 		queue.last = queue.first
 		return
 	}
 
-	queue.first.prev = &QueueNode[T]{value: value, prev: nil, next: queue.first}
+	queue.first.prev = &QueueNode[T]{value: value, prev: nil, next: queue.first, inside: true}
 	queue.first = queue.first.prev
 	return
 }
@@ -44,6 +45,7 @@ func (queue *Queue[T]) PopBeg() *T {
 	}
 
 	value := queue.first.value
+	queue.first.inside = false
 	queue.first = queue.first.next
 	queue.size--
 	if queue.size != 0 {
@@ -65,12 +67,12 @@ func (queue *Queue[T]) PushBack(value *T) {
 	queue.size++
 
 	if queue.size == 1 {
-		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil}
+		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil, inside: true}
 		queue.last = queue.first
 		return
 	}
 
-	queue.last.next = &QueueNode[T]{value: value, prev: queue.last, next: nil}
+	queue.last.next = &QueueNode[T]{value: value, prev: queue.last, next: nil, inside: true}
 	queue.last = queue.last.next
 	return
 }
@@ -82,6 +84,7 @@ func (queue *Queue[T]) PopBack() *T {
 	}
 
 	value := queue.last.value
+	queue.last.inside = false
 	queue.last = queue.last.prev
 	queue.size--
 	if queue.size != 0 {
@@ -96,14 +99,16 @@ func (queue *Queue[T]) PopBack() *T {
 }
 
 func (queue *Queue[T]) Remove(node *QueueNode[T]) {
-	if node == queue.first {
-		queue.PopBeg()
-	} else if node == queue.last {
-		queue.PopBack()
-	} else {
-		node.prev.next = node.next
-		node.next.prev = node.prev
-		queue.size--
+	if node.inside {
+		if node.prev == queue.first {
+			queue.PopBeg()
+		} else if node == queue.last {
+			queue.PopBack()
+		} else {
+			node.prev.next = node.next
+			node.next.prev = node.prev
+			queue.size--
+		}
 	}
 }
 
