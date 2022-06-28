@@ -58,11 +58,11 @@ func (node *Node) FixFinger(index int) int {
 	m := node.config.HashSize            // Obtain the finger table size.
 	ID := FingerID(node.ID, index, m)    // Obtain n + 2^(next) mod (2^m).
 	suc, err := node.FindIDSuccessor(ID) // Obtain the node that succeeds ID = n + 2^(next) mod (2^m).
-	// In case of error finding the successor, report the error and retry.
+	// In case of error finding the successor, report the error and skip this finger.
 	if err != nil || suc == nil {
-		log.Error("Successor of ID not found.\nThe finger fix is postponed.\n")
-		// Return the same index, to retry later.
-		return index
+		log.Error("Successor of ID not found.\nThis finger fix was skipped.\n")
+		// Return the next index to fix.
+		return (index + 1) % m
 	}
 	// If the successor of this ID is this node, then the ring has already been turned around.
 	// Return index 0 to restart the fixing cycle.
