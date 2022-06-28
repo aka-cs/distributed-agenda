@@ -38,8 +38,8 @@ type RemoteServices interface {
 	Delete(node *chord.Node, req *chord.DeleteRequest) error
 	// Extend the storage dictionary of a remote node with a list of <key, values> pairs.
 	Extend(node *chord.Node, req *chord.ExtendRequest) error
-	// Segment return all <key, values> pairs in a given interval from the storage of a remote node.
-	Segment(node *chord.Node, req *chord.SegmentRequest) (*chord.SegmentResponse, error)
+	// Partition return all <key, values> pairs in a given interval from the storage of a remote node.
+	Partition(node *chord.Node, req *chord.EmptyRequest) (*chord.PartitionResponse, error)
 	// Discard all <key, values> pairs in a given interval from the storage of a remote node.
 	Discard(node *chord.Node, req *chord.DiscardRequest) error
 }
@@ -432,8 +432,8 @@ func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest)
 	return err
 }
 
-// Segment return all <key, values> pairs in a given interval from the storage of a remote node.
-func (services *GRPCServices) Segment(node *chord.Node, req *chord.SegmentRequest) (*chord.SegmentResponse, error) {
+// Partition return all <key, values> pairs in a given interval from the storage of a remote node.
+func (services *GRPCServices) Partition(node *chord.Node, req *chord.EmptyRequest) (*chord.PartitionResponse, error) {
 	if node == nil {
 		return nil, errors.New("Cannot establish connection with a null node.\n")
 	}
@@ -448,7 +448,7 @@ func (services *GRPCServices) Segment(node *chord.Node, req *chord.SegmentReques
 	defer cancel()
 
 	// Return the result of the remote call.
-	return remoteNode.Segment(ctx, req)
+	return remoteNode.Partition(ctx, req)
 }
 
 // Discard deletes all <key, values> pairs in a given interval storage of a remote node.

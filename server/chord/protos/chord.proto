@@ -26,10 +26,10 @@ service Chord {
   rpc Set(SetRequest) returns (EmptyResponse);
   // Delete a <key, value> pair from storage.
   rpc Delete(DeleteRequest) returns (EmptyResponse);
+  // Partition return all <key, values> pairs in a given interval from storage.
+  rpc Partition(EmptyRequest) returns (PartitionResponse);
   // Extend set a list of <key, values> pairs on the storage dictionary.
   rpc Extend(ExtendRequest) returns (EmptyResponse);
-  // Segment return all <key, values> pairs in a given interval from storage.
-  rpc Segment(SegmentRequest) returns (SegmentResponse);
   // Discard deletes all <key, values> pairs in a given interval storage.
   rpc Discard(DiscardRequest) returns (EmptyResponse);
 }
@@ -75,24 +75,18 @@ message DeleteRequest {
   bool Replica = 3;
 }
 
+// PartitionResponse contains the contains the <key, value> pairs to return.
+message PartitionResponse {
+  map<string, bytes> in = 1;
+  map<string, bytes> out = 2;
+}
+
 // ExtendRequest contains the <key, value> pairs to set on the storage.
 message ExtendRequest {
   map<string, bytes> dictionary = 1;
 }
 
-// SegmentRequest contains the lower and upper bound of the interval storage to return.
-message SegmentRequest {
-  bytes L = 1;
-  bytes R = 2;
-}
-
-// SegmentResponse contains the contains the <key, value> pairs to return.
-message SegmentResponse {
-  map<string, bytes> dictionary = 1;
-}
-
 // DiscardRequest contains the lower and upper bound of the interval storage to delete.
 message DiscardRequest {
-  bytes L = 1;
-  bytes R = 2;
+  repeated string keys = 1;
 }

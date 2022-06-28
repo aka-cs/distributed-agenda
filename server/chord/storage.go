@@ -9,9 +9,9 @@ type Storage interface {
 	Get(string) ([]byte, error)
 	Set(string, []byte)
 	Delete(string)
-	Segment([]byte, []byte) (map[string][]byte, error)
+	Partition([]byte, []byte) (map[string][]byte, map[string][]byte, error)
 	Extend(map[string][]byte) error
-	Discard([]byte, []byte) error
+	Discard(data []string) error
 }
 
 type Dictionary struct {
@@ -42,28 +42,28 @@ func (dictionary *Dictionary) Delete(key string) {
 	delete(dictionary.data, key)
 }
 
-func (dictionary *Dictionary) Segment(L, R []byte) (map[string][]byte, error) {
+func (dictionary *Dictionary) Partition(L, R []byte) (map[string][]byte, map[string][]byte, error) {
 	if L == nil && R == nil {
-		return dictionary.data, nil
+		return dictionary.data, nil, nil
 	}
 
-	data := make(map[string][]byte)
-	keyIDs := make(map[string][]byte, 0)
+	in := make(map[string][]byte)
+	out := make(map[string][]byte)
 
-	for key, _ := range dictionary.data {
+	for key, value := range dictionary.data {
 		keyID, err := HashKey(key, dictionary.Hash)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		keyIDs[key] = keyID
+
+		if Between(keyID, L, R, false, true) {
+			in[key] = value
+		} else {
+			out[key] = value
+		}
 	}
 
-	for key, keyID := range keyIDs {
-		if Between(keyID, L, R, false, true) {
-			data[key] = dictionary.data[key]
-		}
-	}
-	return data, nil
+	return in, out, nil
 }
 
 func (dictionary *Dictionary) Extend(data map[string][]byte) error {
@@ -73,25 +73,10 @@ func (dictionary *Dictionary) Extend(data map[string][]byte) error {
 	return nil
 }
 
-func (dictionary *Dictionary) Discard(L, R []byte) error {
-	if L == nil && R == nil {
-		dictionary.data = make(map[string][]byte)
+func (dictionary *Dictionary) Discard(data []string) error {
+	for _, key := range data {
+		delete(dictionary.data, key)
 	}
 
-	keyIDs := make(map[string][]byte, 0)
-
-	for key, _ := range dictionary.data {
-		keyID, err := HashKey(key, dictionary.Hash)
-		if err != nil {
-			return err
-		}
-		keyIDs[key] = keyID
-	}
-
-	for key, keyID := range keyIDs {
-		if Between(keyID, L, R, false, true) {
-			delete(dictionary.data, key)
-		}
-	}
 	return nil
 }

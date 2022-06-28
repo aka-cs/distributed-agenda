@@ -26,6 +26,16 @@ func IsOpen[T any](channel <-chan T) bool {
 	}
 }
 
+func Keys[T comparable, K any](dictionary map[T]K) []T {
+	keys := make([]T, 0)
+
+	for key, _ := range dictionary {
+		keys = append(keys, key)
+	}
+
+	return keys
+}
+
 // FingerID computes the offset by (n + 2^i) mod (2^m)
 func FingerID(n []byte, i int, m int) []byte {
 	// Convert the ID to a bigint

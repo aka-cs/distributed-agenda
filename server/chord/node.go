@@ -457,7 +457,7 @@ func (node *Node) CheckPredecessor() {
 			if !Equals(suc.ID, node.ID) {
 				// Lock the dictionary to read it, and unlock it after.
 				node.dictLock.RLock()
-				dictionary, err := node.dictionary.Segment(nil, pred.ID) // Obtain the predecessor keys.
+				_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the predecessor keys.
 				node.dictLock.RUnlock()
 				if err != nil {
 					log.Error("Error obtaining predecessor keys.\n")
@@ -465,11 +465,11 @@ func (node *Node) CheckPredecessor() {
 				}
 
 				log.Debug("Transferring old predecessor keys to the successor.\n")
-				log.Debug(dictionary)
+				log.Debug(out)
 				log.Debug("\n")
 
 				// Transfer the keys to this node successor.
-				err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
+				err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
 				if err != nil {
 					log.Error(err.Error() + "Error transferring keys to successor.\n")
 					return
@@ -562,7 +562,7 @@ func (node *Node) CheckSuccessor() {
 	// Transfer this node keys to the new successor.
 	// Lock the dictionary to read it, and unlock it after.
 	node.dictLock.RLock()
-	dictionary, err := node.dictionary.Segment(pred.ID, node.ID) // Obtain this node keys.
+	in, _, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
 	node.dictLock.RUnlock()
 	if err != nil {
 		log.Error("Error obtaining this node keys.\n")
@@ -570,11 +570,11 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	log.Debug("Transferring keys to the new successor.\n")
-	log.Debug(dictionary)
+	log.Debug(in)
 	log.Debug("\n")
 
 	// Transfer the keys to the new successor, to update it.
-	err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
+	err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: in})
 	if err != nil {
 		log.Error("Error transferring keys to the new successor.\n" + err.Error() + "\n")
 		return
@@ -752,19 +752,19 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 
 	// If successor exists, transfer the old predecessor keys to it, to maintain replication.
 	if !Equals(pred.ID, node.ID) && !Equals(suc.ID, node.ID) {
-		log.Trace("Absorbing predecessor's keys.\n")
+		log.Trace("Absorbing old predecessor's keys.\n")
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		dictionary, err := node.dictionary.Segment(nil, pred.ID)
+		_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the old predecessor keys.
 		node.dictLock.RUnlock()
 		if err != nil {
-			message := "Error obtaining predecessor keys.\n"
+			message := "Error obtaining old predecessor keys.\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
 
 		// Transfer the old predecessor keys to this node successor.
-		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: dictionary})
+		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
 		if err != nil {
 			message := "Error transferring keys to successor at " + suc.Address + ".\n"
 			log.Error(message)
@@ -794,7 +794,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		dictionary, err := node.dictionary.Segment(pred.ID, node.ID) // Obtain this node keys.
+		in, _, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
 		node.dictLock.RUnlock()
 		if err != nil {
 			message := "Error obtaining this node keys.\n"
@@ -803,7 +803,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 		}
 
 		// Transfer this node keys to the new successor, to update it.
-		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: dictionary})
+		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: in})
 		if err != nil {
 			message := "Error transferring keys to the new successor at " + candidate.Address + ".\n"
 			log.Error(message)
@@ -843,7 +843,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		// Transfer to the new predecessor its corresponding keys.
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		dictionary, err := node.dictionary.Segment(nil, new.ID) // Obtain the keys to transfer.
+		_, out, err := node.dictionary.Partition(new.ID, node.ID) // Obtain the keys to transfer.
 		node.dictLock.RUnlock()
 		if err != nil {
 			message := "Error obtaining the new predecessor corresponding keys.\n"
@@ -852,11 +852,11 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		}
 
 		log.Debug("Transferring keys to the new predecessor.\n")
-		log.Debug(dictionary)
+		log.Debug(out)
 		log.Debug("\n")
 
 		// Build the new predecessor dictionary, by transferring its correspondent keys.
-		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: dictionary})
+		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: out})
 		if err != nil {
 			message := "Error transferring keys to the new predecessor.\n"
 			log.Error(message)
@@ -872,7 +872,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 
 		// If successor exists, delete the transferred keys from successor storage replication.
 		if !Equals(suc.ID, node.ID) {
-			err = node.RPC.Discard(suc, &chord.DiscardRequest{L: nil, R: new.ID})
+			err = node.RPC.Discard(suc, &chord.DiscardRequest{Keys: Keys(out)})
 			if err != nil {
 				message := "Error deleting replicated keys on the successor at " + new.Address + ".\n"
 				log.Error(message)
@@ -886,7 +886,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		if !Equals(pred.ID, node.ID) {
 			// Lock the dictionary to write on it, and unlock it after.
 			node.dictLock.Lock()
-			err = node.dictionary.Discard(nil, pred.ID) // Delete the keys of the old predecessor.
+			err = node.dictionary.Discard(Keys(out)) // Delete the keys of the old predecessor.
 			node.dictLock.Unlock()
 			if err != nil {
 				message := "Error deleting old predecessor keys on this node.\n"
@@ -1097,6 +1097,26 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	return emptyResponse, node.RPC.Delete(keyNode, req)
 }
 
+// Partition return all <key, values> pairs in a given interval from storage.
+func (node *Node) Partition(ctx context.Context, req *chord.EmptyRequest) (*chord.PartitionResponse, error) {
+	log.Trace("Getting an interval of keys from local storage dictionary.\n")
+
+	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
+	node.dictLock.RLock()                                       // Lock the dictionary to read it, and unlock it after.
+	in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the <key, value> pairs of the storage.
+	node.dictLock.RUnlock()
+	if err != nil {
+		message := "Error getting an interval of keys from storage dictionary.\n"
+		log.Error(message)
+		return &chord.PartitionResponse{}, errors.New(message + err.Error())
+	}
+	// Return the dictionary corresponding to the interval.
+	return &chord.PartitionResponse{In: in, Out: out}, err
+}
+
 // Extend the storage dictionary of this node with a list of <key, values> pairs.
 func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.EmptyResponse, error) {
 	log.Trace("Extending local storage dictionary.\n")
@@ -1117,28 +1137,12 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	return emptyResponse, err
 }
 
-// Segment return all <key, values> pairs in a given interval from storage.
-func (node *Node) Segment(ctx context.Context, req *chord.SegmentRequest) (*chord.SegmentResponse, error) {
-	log.Trace("Getting an interval of keys from local storage dictionary.\n")
-
-	node.dictLock.RLock()                                    // Lock the dictionary to read it, and unlock it after.
-	dictionary, err := node.dictionary.Segment(req.L, req.R) // Set the <key, value> pairs on the storage.
-	node.dictLock.RUnlock()
-	if err != nil {
-		message := "Error getting an interval of keys from storage dictionary.\n"
-		log.Error(message)
-		return &chord.SegmentResponse{}, errors.New(message + err.Error())
-	}
-	// Return the dictionary corresponding to the interval.
-	return &chord.SegmentResponse{Dictionary: dictionary}, err
-}
-
 // Discard all <key, values> pairs in a given interval from storage.
 func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chord.EmptyResponse, error) {
 	log.Trace("Discarding an interval of keys from local storage dictionary.\n")
 
-	node.dictLock.Lock()                         // Lock the dictionary to write on it, and unlock it after.
-	err := node.dictionary.Discard(req.L, req.R) // Set the <key, value> pairs on the storage.
+	node.dictLock.Lock()                     // Lock the dictionary to write on it, and unlock it after.
+	err := node.dictionary.Discard(req.Keys) // Set the <key, value> pairs on the storage.
 	node.dictLock.Unlock()
 	if err != nil {
 		message := "Error discarding interval of keys from storage dictionary.\n"
