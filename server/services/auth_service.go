@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -53,6 +54,26 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 	}
 
 	return &proto.LoginResponse{Token: tokenString}, nil
+}
+
+func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*proto.SignUpResponse, error) {
+	log.Debugf("SignUp invoked with %v\n", request)
+
+	user := request.GetUser()
+	user.Username = strings.ToLower(user.Username)
+	path := filepath.Join("User", user.Username)
+
+	if persistency.FileExists(path) {
+		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "Username is taken")
+	}
+
+	err := persistency.Save(user, path)
+
+	if err != nil {
+		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	return &proto.SignUpResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
 func StartAuthServer(rsaPrivateKey string, network string, address string) {

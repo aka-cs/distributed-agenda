@@ -3,6 +3,8 @@ syntax="proto3";
 package distributed_agenda;
 option go_package = "./server/proto";
 
+import "proto/users.proto";
+
 message LoginRequest {
   string username = 1;
   string password = 2;
@@ -10,6 +12,14 @@ message LoginRequest {
 
 message LoginResponse {
   string token = 1;
+}
+
+message SignUpRequest{
+  User user = 1;
+}
+
+message SignUpResponse{
+  OperationOutcome result = 1;
 }
 
 service Auth {

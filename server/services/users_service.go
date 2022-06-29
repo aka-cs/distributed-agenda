@@ -6,36 +6,13 @@ import (
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type UserServer struct {
 	proto.UnimplementedUserServiceServer
-}
-
-func (*UserServer) CreateUser(_ context.Context, request *proto.CreateUserRequest) (*proto.CreateUserResponse, error) {
-	log.Debugf("Create user invoked with %v\n", request)
-
-	user := request.GetUser()
-	user.Username = strings.ToLower(user.Username)
-	path := filepath.Join("User", user.Username)
-
-	if persistency.FileExists(path) {
-		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "Username is taken")
-	}
-
-	err := persistency.Save(user, path)
-
-	if err != nil {
-		return &proto.CreateUserResponse{Result: proto.OperationOutcome_FAILED}, err
-	}
-
-	return &proto.CreateUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
 func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
