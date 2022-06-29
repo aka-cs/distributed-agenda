@@ -28,8 +28,10 @@ service Chord {
   rpc Delete(DeleteRequest) returns (EmptyResponse);
   // Extend set a list of <key, values> pairs on the storage dictionary.
   rpc Extend(ExtendRequest) returns (EmptyResponse);
-  // Detach deletes all <key, values> pairs in a given interval storage.
-  rpc Detach(DetachRequest) returns (EmptyResponse);
+  // Segment return all <key, values> pairs in a given interval from storage.
+  rpc Segment(SegmentRequest) returns (SegmentResponse);
+  // Discard deletes all <key, values> pairs in a given interval storage.
+  rpc Discard(DiscardRequest) returns (EmptyResponse);
 }
 
 
@@ -49,7 +51,6 @@ message Node {
   bytes ID = 1;
   string Address = 2;
 }
-
 
 // GetRequest contains the key of a desired value.
 message GetRequest {
@@ -79,8 +80,19 @@ message ExtendRequest {
   map<string, bytes> dictionary = 1;
 }
 
-// DetachRequest contains the lower and upper bound of the interval storage to delete.
-message DetachRequest {
+// SegmentRequest contains the lower and upper bound of the interval storage to return.
+message SegmentRequest {
+  bytes L = 1;
+  bytes R = 2;
+}
+
+// SegmentResponse contains the contains the <key, value> pairs to return.
+message SegmentResponse {
+  map<string, bytes> dictionary = 1;
+}
+
+// DiscardRequest contains the lower and upper bound of the interval storage to delete.
+message DiscardRequest {
   bytes L = 1;
   bytes R = 2;
 }

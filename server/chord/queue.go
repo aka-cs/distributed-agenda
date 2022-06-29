@@ -1,9 +1,5 @@
 package chord
 
-import (
-	"errors"
-)
-
 type Queue[T any] struct {
 	first    *QueueNode[T]
 	last     *QueueNode[T]
@@ -12,7 +8,7 @@ type Queue[T any] struct {
 }
 
 type QueueNode[T any] struct {
-	value T
+	value *T
 	prev  *QueueNode[T]
 	next  *QueueNode[T]
 }
@@ -21,9 +17,9 @@ func NewQueue[T any](capacity int) *Queue[T] {
 	return &Queue[T]{first: nil, last: nil, size: 0, capacity: capacity}
 }
 
-func (queue *Queue[T]) PushBeg(value T) error {
-	if queue.size == queue.capacity {
-		return errors.New("queue filled")
+func (queue *Queue[T]) PushBeg(value *T) {
+	if queue.size == queue.capacity || value == nil {
+		return
 	}
 
 	queue.size++
@@ -31,17 +27,17 @@ func (queue *Queue[T]) PushBeg(value T) error {
 	if queue.size == 1 {
 		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil}
 		queue.last = queue.first
-		return nil
+		return
 	}
 
 	queue.first.prev = &QueueNode[T]{value: value, prev: nil, next: queue.first}
 	queue.first = queue.first.prev
-	return nil
+	return
 }
 
-func (queue *Queue[T]) PopBeg() (T, error) {
+func (queue *Queue[T]) PopBeg() *T {
 	if queue.size == 0 {
-		return nil, errors.New("queue empty")
+		return nil
 	}
 
 	value := queue.first.value
@@ -55,12 +51,12 @@ func (queue *Queue[T]) PopBeg() (T, error) {
 		queue.last = queue.first
 	}
 
-	return value, nil
+	return value
 }
 
-func (queue *Queue[T]) PushBack(value T) error {
-	if queue.size == queue.capacity {
-		return errors.New("queue filled")
+func (queue *Queue[T]) PushBack(value *T) {
+	if queue.size == queue.capacity || value == nil {
+		return
 	}
 
 	queue.size++
@@ -68,17 +64,17 @@ func (queue *Queue[T]) PushBack(value T) error {
 	if queue.size == 1 {
 		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil}
 		queue.last = queue.first
-		return nil
+		return
 	}
 
 	queue.last.next = &QueueNode[T]{value: value, prev: queue.last, next: nil}
 	queue.last = queue.last.next
-	return nil
+	return
 }
 
-func (queue *Queue[T]) PopBack() (T, error) {
+func (queue *Queue[T]) PopBack() *T {
 	if queue.size == 0 {
-		return nil, errors.New("queue empty")
+		return nil
 	}
 
 	value := queue.last.value
@@ -92,25 +88,35 @@ func (queue *Queue[T]) PopBack() (T, error) {
 		queue.first = queue.last
 	}
 
-	return value, nil
+	return value
 }
 
-func (queue *Queue[T]) Remove(node *QueueNode[T]) error {
+func (queue *Queue[T]) Remove(node *QueueNode[T]) {
 	if node == queue.first {
-		_, err := queue.PopBeg()
-		if err != nil {
-			return err
-		}
+		queue.PopBeg()
+	} else if node == queue.last {
+		queue.PopBack()
+	} else {
+		node.prev.next = node.next
+		node.next.prev = node.prev
+		queue.size--
 	}
-	if node == queue.last {
-		_, err := queue.PopBack()
-		if err != nil {
-			return err
-		}
-	}
+}
 
-	node.prev.next = node.next
-	node.next.prev = node.prev
-	queue.size--
-	return nil
+func (queue *Queue[T]) Fulfilled() bool {
+	return queue.size == queue.capacity
+}
+
+func (queue *Queue[T]) Back() *T {
+	if queue.size == 0 {
+		return nil
+	}
+	return queue.last.value
+}
+
+func (queue *Queue[T]) Beg() *T {
+	if queue.size == 0 {
+		return nil
+	}
+	return queue.first.value
 }

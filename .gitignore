@@ -24,3 +24,5 @@ server/resources
 
 # RSA
 *.pem
+/Dockerfile
+/docker-compose.yml

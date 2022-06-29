@@ -1,18 +1,30 @@
 package chord
 
 import (
-	"DistributedTable/chord"
 	"bytes"
+	log "github.com/sirupsen/logrus"
 	"hash"
 	"math/big"
+	"server/chord/chord"
 )
 
-// Necessary definitions.
+// Useful definitions.
 var (
-	nullNode      = &chord.Node{}
 	emptyRequest  = &chord.EmptyRequest{}
 	emptyResponse = &chord.EmptyResponse{}
 )
+
+func IsOpen[T any](channel <-chan T) bool {
+	select {
+	case <-channel:
+		return false
+	default:
+		if channel == nil {
+			return false
+		}
+		return true
+	}
+}
 
 // FingerID computes the offset by (n + 2^i) mod (2^m)
 func FingerID(n []byte, i int, m int) []byte {
@@ -63,8 +75,10 @@ func Between(ID, L, R []byte, includeL, includeR bool) bool {
 }
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {
+	log.Debug("Hashing key: " + key + ".\n")
 	h := hash()
 	if _, err := h.Write([]byte(key)); err != nil {
+		log.Error("Error hashing key " + key + ": " + err.Error() + ".\n")
 		return nil, err
 	}
 	value := h.Sum(nil)
