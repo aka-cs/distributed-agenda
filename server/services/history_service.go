@@ -2,12 +2,15 @@ package services
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"net"
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
+
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type HistoryServer struct {
@@ -84,4 +87,21 @@ func (*HistoryServer) GetHistoryFromOffset(request *proto.GetHistoryFromOffsetRe
 		}
 	}
 	return nil
+}
+
+func StartHistoryService(network string, address string) {
+	log.Infof("History Service Started\n")
+
+	lis, err := net.Listen(network, address)
+
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
+	proto.RegisterHistoryServiceServer(s, &HistoryServer{})
+
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	}
 }

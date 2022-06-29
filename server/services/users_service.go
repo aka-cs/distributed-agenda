@@ -2,15 +2,16 @@ package services
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"net"
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type UserServer struct {
@@ -72,7 +73,7 @@ func StartUserService(network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
 	proto.RegisterUserServiceServer(s, &UserServer{})
 
 	if err := s.Serve(lis); err != nil {
