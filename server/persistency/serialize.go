@@ -3,11 +3,12 @@ package persistency
 import (
 	"encoding/gob"
 	"errors"
+	"os"
+	"path/filepath"
+
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"os"
-	"path/filepath"
 )
 
 func Save[T any](object T, path string) error {
@@ -53,12 +54,13 @@ func Load[T any](path string) (T, error) {
 	var empty T
 
 	dataFile, err := os.Open(fullPath)
-	defer closeFile(dataFile)
 
 	if err != nil {
 		log.Errorf("Error opening file:\n%v\n", err)
-		return empty, status.Error(codes.Internal, "Couldn't open file")
+		return empty, status.Error(codes.NotFound, "File not found")
 	}
+
+	defer closeFile(dataFile)
 
 	dataDecoder := gob.NewDecoder(dataFile)
 	err = dataDecoder.Decode(&result)
