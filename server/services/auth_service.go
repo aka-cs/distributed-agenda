@@ -34,7 +34,7 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(request.Password))
 	if err != nil {
 		log.Infof("Permission denied:\n%v\n", err)
-		return nil, status.Errorf(codes.PermissionDenied, "")
+		return nil, status.Errorf(codes.PermissionDenied, "Wrong username or password")
 	}
 
 	claims := make(jwt.MapClaims)
@@ -68,6 +68,14 @@ func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*pro
 	}
 
 	err := persistency.Save(user, path)
+
+	if err != nil {
+		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	path = filepath.Join("History", user.Username)
+
+	err = persistency.Save([]proto.HistoryEntry{}, path)
 
 	if err != nil {
 		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, err
