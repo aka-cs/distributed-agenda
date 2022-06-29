@@ -1,19 +1,17 @@
+import asyncio as aio
+import logging
+
+import bcrypt
 import jwt
 import streamlit as st
-import pandas as pd
-import numpy as np
-from data.create_data import create_table
+from grpclib import GRPCError
 
-import logging
-import grpc
-from grpclib.client import Channel
-from grpclib import GRPCError, Status
-import proto.users_pb2
-import proto.users_grpc
-import proto.auth_pb2
 import proto.auth_grpc
-import bcrypt
-import asyncio as aio
+import proto.auth_pb2
+import proto.users_grpc
+import proto.users_pb2
+from rpc import services
+from rpc.client import Channel
 
 TOKEN = 'token'
 
@@ -56,7 +54,7 @@ async def app():
     signup_state = signup_state == 'SignUp'
 
     # ip = st.number_input(label='', key=1), st.number_input(label='', key=2), st.number_input(label='', key=3), st.number_input(label='', key=4)
-    ip = '192.168.175.195'
+    # ip = '192.168.175.195'
 
     with st.form('login') as form:
         username = st.text_input('Username')
@@ -68,11 +66,11 @@ async def app():
         if signup_state:
             submitted = st.form_submit_button('Sign Up')
             if submitted:
-                result = await signup(username, password, name, email, ip)
+                result = await signup(username, password, name, email)
         else:
             submitted = st.form_submit_button('Log In')
             if submitted:
-                result = await login(username, password, ip)
+                result = await login(username, password)
                 if result:
                     st.experimental_rerun()
 
@@ -83,7 +81,7 @@ def sync(f, loop):
     return wrapper
 
 
-async def signup(username: str, password: str, name: str, email: str,  ip: str):
+async def signup(username: str, password: str, name: str, email: str):
     logging.info(f"Creating user: username: {username}, name: {name}, email: {email}, password: {'*' * len(password)}")
     salt = bcrypt.gensalt()
 
@@ -92,7 +90,7 @@ async def signup(username: str, password: str, name: str, email: str,  ip: str):
 
     request = proto.users_pb2.CreateUserRequest(user=user)
 
-    async with Channel(ip, 50051) as channel:
+    async with Channel(services.USER) as channel:
         stub = proto.users_grpc.UserServiceStub(channel)
         try:
             response = await stub.CreateUser(request)
@@ -104,12 +102,12 @@ async def signup(username: str, password: str, name: str, email: str,  ip: str):
             st.error(error.message)
 
 
-async def login(username:str, password: str, ip: str):
+async def login(username:str, password: str):
     logging.info(f"Logging in: username: {username}, password: {'*' * len(password)}")
 
     request = proto.auth_pb2.LoginRequest(username=username, password=password)
 
-    async with Channel(ip, 50054) as channel:
+    async with Channel(services.AUTH) as channel:
         stub = proto.auth_grpc.AuthStub(channel)
         try:
             response = await stub.Login(request)
