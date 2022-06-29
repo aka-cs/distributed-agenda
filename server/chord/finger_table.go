@@ -66,7 +66,7 @@ func (node *Node) FixFinger(index int) int {
 	}
 	// If the successor of this ID is this node, then the ring has already been turned around.
 	// Return index 0 to restart the fixing cycle.
-	if Equals(ID, node.ID) {
+	if Equals(suc.ID, node.ID) {
 		return 0
 	}
 

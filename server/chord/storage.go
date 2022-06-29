@@ -46,6 +46,10 @@ func (dictionary *Dictionary) Partition(L, R []byte) (map[string][]byte, map[str
 	in := make(map[string][]byte)
 	out := make(map[string][]byte)
 
+	if Equals(L, R) {
+		return dictionary.data, out, nil
+	}
+
 	for key, value := range dictionary.data {
 		if between, err := KeyBetween(key, dictionary.Hash, L, R); between && err == nil {
 			in[key] = value

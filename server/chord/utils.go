@@ -72,10 +72,6 @@ func KeyBetween(key string, hash func() hash.Hash, L, R []byte) (bool, error) {
 		return false, err
 	}
 
-	if Equals(L, R) {
-		L = big.NewInt(0).Bytes()
-	}
-
 	return Equals(ID, R) || Between(ID, L, R), nil
 }
 

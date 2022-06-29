@@ -432,6 +432,8 @@ func (node *Node) CheckPredecessor() {
 				}
 
 				log.Debug("Transferring old predecessor keys to the successor.\n")
+				log.Debug(out)
+				log.Debug("\n")
 
 				// Transfer the keys to this node successor.
 				err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
@@ -453,7 +455,7 @@ func (node *Node) CheckPredecessor() {
 func (node *Node) PeriodicallyCheckPredecessor() {
 	log.Debug("Check predecessor thread started.\n")
 
-	ticker := time.NewTicker(10 * time.Second) // Set the time between routine activations.
+	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
 		case <-ticker.C:
@@ -535,6 +537,8 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	log.Debug("Transferring keys to the new successor.\n")
+	log.Debug(in)
+	log.Debug("\n")
 
 	// Transfer the keys to the new successor, to update it.
 	err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: in})
@@ -641,8 +645,8 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 func (node *Node) PeriodicallyFixDescendant() {
 	log.Debug("Fix descendant thread started.\n")
 
-	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
-	var entry *QueueNode[chord.Node] = nil    // Queue node entry for iterations.
+	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
+	var entry *QueueNode[chord.Node] = nil           // Queue node entry for iterations.
 
 	for {
 		select {
@@ -732,6 +736,10 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 			return emptyResponse, errors.New(message + err.Error())
 		}
 
+		log.Debug("Transferring old predecessor keys to the successor.\n")
+		log.Debug(out)
+		log.Debug("\n")
+
 		// Transfer the old predecessor keys to this node successor.
 		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
 		if err != nil {
@@ -770,6 +778,10 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
+
+		log.Debug("Transferring keys to the new successor.\n")
+		log.Debug(in)
+		log.Debug("\n")
 
 		// Transfer this node keys to the new successor, to update it.
 		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: in})
@@ -821,6 +833,8 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		}
 
 		log.Debug("Transferring keys to the new predecessor.\n")
+		log.Debug(out)
+		log.Debug("\n")
 
 		// Build the new predecessor dictionary, by transferring its correspondent keys.
 		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: out})
@@ -847,6 +861,8 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 			}
 
 			log.Debug("Successful delete of old predecessor replicated keys in the successor.\n")
+			log.Debug(Keys(out))
+			log.Debug("\n")
 		}
 
 		// If the old predecessor is not this node, delete the old predecessor keys from this node.
@@ -871,6 +887,8 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 				return emptyResponse, errors.New(message + err.Error())
 			}
 
+			log.Debug(Keys(out))
+			log.Debug("\n")
 			log.Debug("Successful delete of old predecessor replicated keys in this node.\n")
 		}
 	}
@@ -897,6 +915,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
 	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
+		log.Debug("Searching for the corresponding node.\n")
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			message := "Error getting key.\n"
@@ -955,6 +974,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
 	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
+		log.Debug("Searching for the corresponding node.\n")
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			message := "Error setting key.\n"
@@ -1021,6 +1041,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
 	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
+		log.Debug("Searching for the corresponding node.\n")
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			message := "Error deleting key.\n"
