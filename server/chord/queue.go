@@ -100,7 +100,7 @@ func (queue *Queue[T]) PopBack() *T {
 
 func (queue *Queue[T]) Remove(node *QueueNode[T]) {
 	if node.inside {
-		if node.prev == queue.first {
+		if node == queue.first {
 			queue.PopBeg()
 		} else if node == queue.last {
 			queue.PopBack()

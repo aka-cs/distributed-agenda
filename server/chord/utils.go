@@ -29,7 +29,7 @@ func IsOpen[T any](channel <-chan T) bool {
 func Keys[T comparable, K any](dictionary map[T]K) []T {
 	keys := make([]T, 0)
 
-	for key, _ := range dictionary {
+	for key := range dictionary {
 		keys = append(keys, key)
 	}
 
@@ -66,25 +66,29 @@ func Equals(ID1, ID2 []byte) bool {
 	return bytes.Compare(ID1, ID2) == 0
 }
 
-// Between checks if an ID is in the (L, R) interval, on the chord ring.
-func Between(ID, L, R []byte, includeL, includeR bool) bool {
-	// If it is required to consider any of the limits of the interval in the check,
-	// check the equality of the ID with such limit.
-	if (includeL && bytes.Equal(L, ID)) || (includeR && bytes.Equal(R, ID)) {
-		return true
+func KeyBetween(key string, hash func() hash.Hash, L, R []byte) (bool, error) {
+	ID, err := HashKey(key, hash) // Obtain the correspondent ID of the key.
+	if err != nil {
+		return false, err
 	}
 
-	greater := bytes.Compare(L, ID) < 0 || L == nil
-	lower := 0 < bytes.Compare(R, ID) || R == nil
+	if Equals(L, R) {
+		L = big.NewInt(0).Bytes()
+	}
 
+	return Equals(ID, R) || Between(ID, L, R), nil
+}
+
+// Between checks if an ID is in the (L, R) interval, on the chord ring.
+func Between(ID, L, R []byte) bool {
 	// If L < R, return true if L < ID < R.
 	if bytes.Compare(L, R) < 0 {
-		return greater && lower
+		return bytes.Compare(L, ID) < 0 && bytes.Compare(ID, R) < 0
 	}
 
 	// If L >= R, this is a segment over the end of the ring.
 	// So, ID is between L and R if L < ID or ID < R.
-	return greater || lower
+	return bytes.Compare(L, ID) < 0 || bytes.Compare(ID, R) < 0
 }
 
 func HashKey(key string, hash func() hash.Hash) ([]byte, error) {

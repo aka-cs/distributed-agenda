@@ -42,7 +42,7 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 		finger := node.fingerTable[i]
 		node.fingerLock.RUnlock()
 
-		if finger != nil && Between(finger.Node.ID, node.ID, ID, false, true) {
+		if finger != nil && Between(finger.Node.ID, node.ID, ID) {
 			return finger.Node
 		}
 	}

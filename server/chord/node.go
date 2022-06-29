@@ -1,12 +1,10 @@
 package chord
 
 import (
-	"bytes"
 	"errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"math/big"
 	"net"
 	"server/chord/chord"
 	"sync"
@@ -293,37 +291,6 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	suc, err := node.RPC.FindSuccessor(pred, id)
 	if err != nil {
 		message := "Error finding ID successor from finger at " + pred.Address + ".\n"
-
-		ID := big.Int{}
-		ID.SetBytes(id)
-		nodeID := big.Int{}
-		nodeID.SetBytes(node.ID)
-		predID := big.Int{}
-		predID.SetBytes(pred.ID)
-
-		message += ID.String() + "\n" + nodeID.String() + "\n" + predID.String() + "\n"
-		if Between(pred.ID, node.ID, id, false, true) {
-			message += "YES\n"
-
-			if bytes.Compare(node.ID, pred.ID) < 0 {
-				message += "1\n"
-			}
-			if 0 < bytes.Compare(id, pred.ID) {
-				message += "2\n"
-			}
-		}
-		if Between(node.ID, pred.ID, id, false, true) {
-			message += "YES TOO\n"
-
-			if bytes.Compare(pred.ID, node.ID) < 0 {
-				message += "3\n"
-			}
-			if 0 < bytes.Compare(id, node.ID) {
-				message += "4\n"
-			}
-		}
-		message += pred.Address + " " + node.Address + "\n"
-
 		log.Error(message + err.Error() + "\n")
 		return nil, errors.New(message + err.Error())
 	}
@@ -387,7 +354,7 @@ func (node *Node) Stabilize() {
 
 	// If candidate is closer to this node than its current successor, update this node successor
 	// with the candidate.
-	if Between(candidate.ID, node.ID, suc.ID, false, false) {
+	if Equals(node.ID, suc.ID) || Between(candidate.ID, node.ID, suc.ID) {
 		log.Debug("Successor updated to node at " + candidate.Address + ".\n")
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
@@ -838,7 +805,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 
 	// If this node has no predecessor or the predecessor candidate is closer to this node
 	// than its current predecessor, update this node predecessor with the candidate.
-	if Between(new.ID, pred.ID, node.ID, false, false) {
+	if Equals(pred.ID, node.ID) || Between(new.ID, pred.ID, node.ID) {
 		log.Debug("Predecessor updated to node at " + new.Address + ".\n")
 
 		// Lock the predecessor to write on it, and unlock it after.
@@ -918,13 +885,6 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
 	log.Info("Get: key=" + req.Key + ".\n")
 
-	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		message := "Error getting key.\n"
-		log.Error(message)
-		return &chord.GetResponse{}, errors.New(message + err.Error())
-	}
-
 	keyNode := node.Node  // By default, take this node to find the key in the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
@@ -932,13 +892,17 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
-	if Between(keyID, pred.ID, node.ID, false, true) {
+	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			message := "Error getting key.\n"
 			log.Error(message)
 			return &chord.GetResponse{}, errors.New(message + err.Error())
 		}
+	} else if err != nil {
+		message := "Error getting key.\n"
+		log.Error(message)
+		return &chord.GetResponse{}, errors.New(message + err.Error())
 	}
 
 	// If the node that stores the key is this node, directly get the associated value from this node storage.
@@ -979,14 +943,6 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		return emptyResponse, nil
 	}
 
-	// Otherwise, proceed normally.
-	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		message := "Error setting key.\n"
-		log.Error(message)
-		return emptyResponse, errors.New(message + err.Error())
-	}
-
 	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
@@ -994,13 +950,17 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
-	if Between(keyID, pred.ID, node.ID, false, true) {
-		keyNode, err = node.LocateKey(req.Key) // Locate the node to which that key corresponds.
+	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
+		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			message := "Error setting key.\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
+	} else if err != nil {
+		message := "Error setting key.\n"
+		log.Error(message)
+		return emptyResponse, errors.New(message + err.Error())
 	}
 
 	// If the key corresponds to this node, directly set the <key, value> pair on its storage.
@@ -1049,14 +1009,6 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 		return emptyResponse, nil
 	}
 
-	// Otherwise, proceed normally.
-	keyID, err := HashKey(req.Key, node.config.Hash) // Obtain the correspondent ID of the key.
-	if err != nil {
-		message := "Error deleting key.\n"
-		log.Error(message)
-		return emptyResponse, errors.New(message + err.Error())
-	}
-
 	keyNode := node.Node  // By default, take this node to delete the <key, value> pair from the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
@@ -1064,13 +1016,17 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
-	if Between(keyID, pred.ID, node.ID, false, true) {
+	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
 		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
 		if err != nil {
 			message := "Error deleting key.\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
+	} else if err != nil {
+		message := "Error deleting key.\n"
+		log.Error(message)
+		return emptyResponse, errors.New(message + err.Error())
 	}
 
 	// If the key corresponds to this node, directly delete the <key, value> pair from its storage.

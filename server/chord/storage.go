@@ -29,7 +29,7 @@ func NewDictionary(hash func() hash.Hash) *Dictionary {
 func (dictionary *Dictionary) Get(key string) ([]byte, error) {
 	value, ok := dictionary.data[key]
 	if !ok {
-		return nil, errors.New("invalid key")
+		return nil, errors.New("Key not found.\n")
 	}
 	return value, nil
 }
@@ -43,23 +43,16 @@ func (dictionary *Dictionary) Delete(key string) {
 }
 
 func (dictionary *Dictionary) Partition(L, R []byte) (map[string][]byte, map[string][]byte, error) {
-	if L == nil && R == nil {
-		return dictionary.data, nil, nil
-	}
-
 	in := make(map[string][]byte)
 	out := make(map[string][]byte)
 
 	for key, value := range dictionary.data {
-		keyID, err := HashKey(key, dictionary.Hash)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if Between(keyID, L, R, false, true) {
+		if between, err := KeyBetween(key, dictionary.Hash, L, R); between && err == nil {
 			in[key] = value
-		} else {
+		} else if !between && err == nil {
 			out[key] = value
+		} else {
+			return nil, nil, err
 		}
 	}
 
