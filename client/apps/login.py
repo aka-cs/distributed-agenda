@@ -52,9 +52,6 @@ async def app():
     st.title(signup_state)
     signup_state = signup_state == 'SignUp'
 
-    # ip = st.number_input(label='', key=1), st.number_input(label='', key=2), st.number_input(label='', key=3), st.number_input(label='', key=4)
-    # ip = '192.168.175.195'
-
     with st.form('login') as form:
         username = st.text_input('Username')
         if signup_state:
@@ -87,12 +84,12 @@ async def signup(username: str, password: str, name: str, email: str):
     user = proto.users_pb2.User(username=username, name=name,
                                 passwordHash=bcrypt.hashpw(password.encode(), salt).decode(), email=email)
 
-    request = proto.users_pb2.CreateUserRequest(user=user)
+    request = proto.auth_pb2.SignUpRequest(user=user)
 
-    async with Channel(services.USER) as channel:
-        stub = proto.users_grpc.UserServiceStub(channel)
+    async with Channel(services.AUTH) as channel:
+        stub = proto.auth_grpc.AuthStub(channel)
         try:
-            response = await stub.CreateUser(request)
+            response = await stub.SignUp(request)
             logging.info(f"User created with response result: {response.result}")
             st.success("User created!")
             return True
@@ -111,7 +108,7 @@ async def login(username:str, password: str):
         try:
             response = await stub.Login(request)
             await Store.async_disk_store(TOKEN, response.token)
-            st.success('Logged In')
+            logging.info('Login successful')
             return True
         except GRPCError as error:
             logging.error(error.message)
