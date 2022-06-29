@@ -24,4 +24,5 @@ message SignUpResponse{
 
 service Auth {
   rpc Login (LoginRequest) returns (LoginResponse);
+  rpc SignUp (SignUpRequest) returns (SignUpResponse);
 }

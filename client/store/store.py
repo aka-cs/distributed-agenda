@@ -34,7 +34,7 @@ class Store:
     @staticmethod
     def disk_get(key):
         user_path = os.path.expanduser('~')
-        file_path = f'{user_path}/.distributed-agenda{key}.txt'
+        file_path = f'{user_path}/.distributed-agenda/{key}.txt'
 
         # if file doesn't exist, return None
         if not os.path.exists(file_path):
@@ -67,7 +67,7 @@ class Store:
     @staticmethod
     async def async_disk_get(key):
         user_path = os.path.expanduser('~')
-        file_path = f'{user_path}/.distributed-agenda{key}.txt'
+        file_path = f'{user_path}/.distributed-agenda/{key}.txt'
 
         # if file doesn't exist, return None
         if not os.path.exists(file_path):
