@@ -234,3 +234,24 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	log.Debug("Successful key location.\n")
 	return suc, nil
 }
+
+// ClosestFinger find the closest finger preceding this ID.
+func (node *Node) ClosestFinger(ID []byte) *chord.Node {
+	log.Trace("Finding the closest finger preceding this ID.\n")
+	defer log.Trace("Closest finger found.\n")
+
+	// Iterate the finger table in reverse, and return the first finger
+	// such that the finger ID is between this node ID and the parameter ID.
+	for i := len(node.fingerTable) - 1; i >= 0; i-- {
+		node.fingerLock.RLock()
+		finger := node.fingerTable[i]
+		node.fingerLock.RUnlock()
+
+		if finger != nil && Between(finger.ID, node.ID, ID) {
+			return finger
+		}
+	}
+
+	// If no finger meets the conditions, return this node.
+	return node.Node
+}
