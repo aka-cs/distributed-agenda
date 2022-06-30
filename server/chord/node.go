@@ -185,27 +185,7 @@ func (node *Node) Stop() error {
 		return errors.New(message + err.Error())
 	}
 
-	// Initialize the node fields.
-	// Lock the queue of successors to write on it, and unlock it after.
-	node.sucLock.Lock()
-	node.successors = nil // Delete the successors queue.
-	node.sucLock.Unlock()
-	// Lock the predecessor to write on it, and unlock it after.
-	node.predLock.Lock()
-	node.predecessor = nil // Delete this node predecessor.
-	node.predLock.Unlock()
-	// Lock the finger table to write on it, and unlock it after.
-	node.fingerLock.Lock()
-	node.fingerTable = nil // Delete the finger table.
-	node.fingerLock.Unlock()
-	// Lock the storage dictionary to write on it, and unlock it after.
-	node.dictLock.Lock()
-	node.dictionary = nil // Delete the node dictionary.
-	node.dictLock.Unlock()
-	// Create the server and its correspondent socket.
 	node.server.Stop() // Stop serving at the opened socket.
-	node.server = nil  // Delete the node server.
-	node.sock = nil    // Delete the socket.
 
 	close(node.shutdown) // Report the node server is shutdown.
 	log.Info("Server closed.\n")
@@ -496,9 +476,12 @@ func (node *Node) CheckSuccessor() {
 		if err != nil {
 			// Lock the successor to write on it, and unlock it after.
 			node.sucLock.Lock()
-			node.successors.PopBeg()            // Remove the actual successor.
-			node.successors.PushBack(node.Node) // Push back this node, to ensure the queue is not empty.
-			suc = node.successors.Beg()         // Take the next successor in queue.
+			node.successors.PopBeg() // Remove the actual successor.
+			// Push back this node, to ensure the queue is not empty.
+			if node.successors.Empty() {
+				node.successors.PushBack(node.Node)
+			}
+			suc = node.successors.Beg() // Take the next successor in queue.
 			node.sucLock.Unlock()
 			log.Error("Successor at " + suc.Address + " failed.\n" + err.Error() + "\n")
 		} else {
@@ -602,10 +585,13 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 			"Therefore is assumed dead and removed from the queue of successors.\n"
 		log.Error(message + err.Error() + "\n")
 
-		node.sucLock.Lock()                 // Lock the queue to write on it, and unlock it after.
-		node.successors.Remove(entry)       // Remove it from the descendents queue.
-		node.successors.PushBack(node.Node) // Push back this node, to ensure the queue is not empty.
-		prev := entry.prev                  // Obtain the previous node of this queue node.
+		node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
+		node.successors.Remove(entry) // Remove it from the descendents queue.
+		// Push back this node, to ensure the queue is not empty.
+		if node.successors.Empty() {
+			node.successors.PushBack(node.Node)
+		}
+		prev := entry.prev // Obtain the previous node of this queue node.
 		node.sucLock.Unlock()
 		// Return the previous node of this queue node.
 		return prev
@@ -967,16 +953,23 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If this request is a replica from our predecessor, resolve it local.
-	if Equals(req.Replica, pred.ID) {
-		log.Debug("Resolving set request locally (replication).\n")
+	// If the request is a replica.
+	if req.Replica != nil {
+		// If the replica is from our predecessor, resolve it local.
+		if Equals(req.Replica, pred.ID) {
+			log.Debug("Resolving set request locally (replication).\n")
 
-		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
-		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
-		node.dictLock.Unlock()
+			node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
+			node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
+			node.dictLock.Unlock()
 
-		log.Info("Successful set.\n")
-		return emptyResponse, nil
+			log.Info("Successful set.\n")
+			return emptyResponse, nil
+		} else {
+			// Otherwise, ignore it.
+			log.Info("Replica from non predecessor node: request ignored.\n")
+			return emptyResponse, nil
+		}
 	}
 
 	// If the key ID is not between this predecessor node ID and this node ID,
@@ -1034,16 +1027,23 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	// If this request is a replica from our predecessor, resolve it local.
-	if Equals(req.Replica, pred.ID) {
-		log.Debug("Resolving delete request locally (replication).\n")
+	// If the request is a replica.
+	if req.Replica != nil {
+		// If the replica is from our predecessor, resolve it local.
+		if Equals(req.Replica, pred.ID) {
+			log.Debug("Resolving set request locally (replication).\n")
 
-		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
-		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
-		node.dictLock.Unlock()
+			node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
+			node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
+			node.dictLock.Unlock()
 
-		log.Info("Successful delete.\n")
-		return emptyResponse, nil
+			log.Info("Successful delete.\n")
+			return emptyResponse, nil
+		} else {
+			// Otherwise, ignore it.
+			log.Info("Replica from non predecessor node: request ignored.\n")
+			return emptyResponse, nil
+		}
 	}
 
 	// If the key ID is not between this predecessor node ID and this node ID,

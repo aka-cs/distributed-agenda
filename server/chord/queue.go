@@ -118,6 +118,10 @@ func (queue *Queue[T]) Remove(node *QueueNode[T]) {
 	}
 }
 
+func (queue *Queue[T]) Empty() bool {
+	return queue.size == 0
+}
+
 func (queue *Queue[T]) Fulfilled() bool {
 	return queue.size == queue.capacity
 }
