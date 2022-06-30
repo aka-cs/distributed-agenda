@@ -680,6 +680,77 @@ func (node *Node) PeriodicallyFixDescendant() {
 	}
 }
 
+func (node *Node) FixStorage(key string) {
+	// Lock the predecessor to read it, and unlock it after.
+	node.predLock.RLock()
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
+	keyNode, err := node.LocateKey(key)
+	if err != nil {
+		return
+	}
+
+	if !Equals(keyNode.ID, pred.ID) && !Equals(keyNode.ID, node.ID) {
+		node.dictLock.RLock()
+		value, err := node.dictionary.Get(key)
+		node.dictLock.RUnlock()
+		if err != nil {
+			return
+		}
+
+		err = node.RPC.Set(keyNode, &chord.SetRequest{Key: key, Value: value})
+		if err != nil {
+			return
+		}
+
+		node.dictLock.Lock()
+		node.dictionary.Delete(key)
+		node.dictLock.Unlock()
+		if err != nil {
+			return
+		}
+	}
+}
+
+// PeriodicallyFixStorage periodically storage dictionary.
+func (node *Node) PeriodicallyFixStorage() {
+	log.Debug("Fix storage thread started.\n")
+
+	next := 0                                        // Index of the actual storage entry to fix.
+	keys := make([]string, 0)                        // Keys to fix.
+	ticker := time.NewTicker(500 * time.Millisecond) // Set the time between routine activations.
+	for {
+		select {
+		case <-ticker.C:
+			if next == len(keys) {
+				// Lock the predecessor to read it, and unlock it after.
+				node.predLock.RLock()
+				pred := node.predecessor
+				node.predLock.RUnlock()
+
+				node.dictLock.RLock()
+				_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the replicated keys.
+				node.dictLock.RUnlock()
+				if err != nil {
+					continue
+				}
+
+				keys = Keys(out)
+				next = 0
+			}
+
+			if next < len(keys) {
+				node.FixStorage(keys[next]) // If it's time, fix the correspondent storage entry.
+				next++
+			}
+		case <-node.shutdown:
+			ticker.Stop() // If node server is shutdown, stop the thread.
+			return
+		}
+	}
+}
+
 // Node server chord methods.
 
 // GetPredecessor returns the node believed to be the current predecessor.
