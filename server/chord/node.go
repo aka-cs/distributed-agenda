@@ -963,29 +963,22 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
 	log.Info("Set: key=" + req.Key + " value=" + string(req.Value) + ".\n")
 
+	// If this request is a replica, resolve it local.
+	if req.Replica {
+		log.Debug("Resolving set request locally (replication).\n")
+
+		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
+		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
+		node.dictLock.Unlock()
+
+		log.Info("Successful set.\n")
+		return emptyResponse, nil
+	}
+
 	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
 	node.predLock.RUnlock()
-
-	// If the request is a replica.
-	if req.Replica != nil {
-		// If the replica is from our predecessor, resolve it local.
-		if Equals(req.Replica, pred.ID) {
-			log.Debug("Resolving set request locally (replication).\n")
-
-			node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
-			node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
-			node.dictLock.Unlock()
-
-			log.Info("Successful set.\n")
-			return emptyResponse, nil
-		} else {
-			// Otherwise, ignore it.
-			log.Info("Replica from non predecessor node: request ignored.\n")
-			return emptyResponse, nil
-		}
-	}
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
@@ -1019,7 +1012,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 		// If successor is not this node, replicate the request to it.
 		if !Equals(suc.ID, node.ID) {
-			req.Replica = node.ID
+			req.Replica = true
 			log.Debug("Replicating set request to " + suc.Address + ".\n")
 			return emptyResponse, node.RPC.Set(suc, req)
 		}
@@ -1037,29 +1030,22 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
 	log.Info("Delete: key=" + req.Key + ".\n")
 
+	// If this request is a replica, resolve it local.
+	if req.Replica {
+		log.Debug("Resolving delete request locally (replication).\n")
+
+		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
+		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
+		node.dictLock.Unlock()
+
+		log.Info("Successful delete.\n")
+		return emptyResponse, nil
+	}
+
 	keyNode := node.Node  // By default, take this node to delete the <key, value> pair from the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
 	node.predLock.RUnlock()
-
-	// If the request is a replica.
-	if req.Replica != nil {
-		// If the replica is from our predecessor, resolve it local.
-		if Equals(req.Replica, pred.ID) {
-			log.Debug("Resolving set request locally (replication).\n")
-
-			node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
-			node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
-			node.dictLock.Unlock()
-
-			log.Info("Successful delete.\n")
-			return emptyResponse, nil
-		} else {
-			// Otherwise, ignore it.
-			log.Info("Replica from non predecessor node: request ignored.\n")
-			return emptyResponse, nil
-		}
-	}
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
@@ -1093,7 +1079,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 		// If successor is not this node, replicate the request to it.
 		if Equals(suc.ID, node.ID) {
-			req.Replica = node.ID
+			req.Replica = true
 			log.Debug("Replicating delete request to " + suc.Address + ".\n")
 			return emptyResponse, node.RPC.Delete(suc, req)
 		}

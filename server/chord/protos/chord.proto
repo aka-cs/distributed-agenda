@@ -66,13 +66,13 @@ message GetResponse {
 message SetRequest {
   string Key = 1;
   bytes Value = 2;
-  bytes Replica = 3;
+  bool Replica = 3;
 }
 
 // DeleteRequest contains the key to eliminate.
 message DeleteRequest {
   string Key = 1;
-  bytes Replica = 3;
+  bool Replica = 2;
 }
 
 // PartitionResponse contains the contains the <key, value> pairs to return.
