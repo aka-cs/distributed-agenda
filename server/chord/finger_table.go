@@ -3,7 +3,6 @@ package chord
 import (
 	log "github.com/sirupsen/logrus"
 	"server/chord/chord"
-	"time"
 )
 
 // Finger structure.
@@ -49,49 +48,4 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 
 	// If no finger meets the conditions, return this node.
 	return node.Node
-}
-
-// FixFinger update a particular finger on the finger table, and return the index of the next finger to update.
-func (node *Node) FixFinger(index int) int {
-	log.Trace("Fixing finger entry.\n")
-
-	m := node.config.HashSize            // Obtain the finger table size.
-	ID := FingerID(node.ID, index, m)    // Obtain n + 2^(next) mod (2^m).
-	suc, err := node.FindIDSuccessor(ID) // Obtain the node that succeeds ID = n + 2^(next) mod (2^m).
-	// In case of error finding the successor, report the error and skip this finger.
-	if err != nil || suc == nil {
-		log.Error("Successor of ID not found.\nThis finger fix was skipped.\n")
-		// Return the next index to fix.
-		return (index + 1) % m
-	}
-	// If the successor of this ID is this node, then the ring has already been turned around.
-	// Return index 0 to restart the fixing cycle.
-	if Equals(suc.ID, node.ID) {
-		return 0
-	}
-
-	finger := &Finger{ID, suc}       // Create the correspondent finger with the obtained node.
-	node.fingerLock.Lock()           // Lock finger table to write on it, and unlock it after.
-	node.fingerTable[index] = finger // Update the correspondent position on the finger table.
-	node.fingerLock.Unlock()
-
-	// Return the next index to fix.
-	return (index + 1) % m
-}
-
-// PeriodicallyFixFinger periodically fix finger tables.
-func (node *Node) PeriodicallyFixFinger() {
-	log.Debug("Fix finger thread started.\n")
-
-	next := 0                                        // Index of the actual finger entry to fix.
-	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
-	for {
-		select {
-		case <-ticker.C:
-			next = node.FixFinger(next) // If it's time, fix the correspondent finger table entry.
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
-			return
-		}
-	}
 }
