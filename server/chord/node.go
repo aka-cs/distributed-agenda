@@ -581,21 +581,18 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 		return nil
 	}
 
-	// If the queue node is not inside the queue, return the next node.
-	if !entry.inside {
-		log.Trace("Successor queue entry fixed.\n")
-		return entry.next
-	}
-
-	node.sucLock.RLock()                     // Lock the queue to read it, and unlock it after.
-	last := entry == node.successors.last    // Verify if this queue node is the last one.
-	fulfilled := node.successors.Fulfilled() // Verify if the queue of successors of this node is fulfilled.
-	value := entry.value                     // Obtain the successor contained in this queue node.
+	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
+	value := entry.value // Obtain the successor contained in this queue node.
+	next := entry.next
+	inside := entry.inside
+	fulfilled := node.successors.Fulfilled()
 	node.sucLock.RUnlock()
 
+	// If the queue node is not inside the queue, return the next node.
 	// If this queue node is the last one, and the queue is fulfilled, return null to restart the fixing cycle.
-	if last && fulfilled {
-		return nil
+	if !inside || next == nil && fulfilled {
+		log.Trace("Successor queue entry fixed.\n")
+		return next
 	}
 
 	suc, err := node.RPC.GetSuccessor(value) // Otherwise, get the successor of this successor.
@@ -605,27 +602,42 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 			"Therefore is assumed dead and removed from the queue of successors.\n"
 		log.Error(message + err.Error() + "\n")
 
-		node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
-		node.successors.Remove(entry) // Remove it from the descendents queue.
-		prev := entry.prev            // Obtain the previous node of this queue node.
+		node.sucLock.Lock()                 // Lock the queue to write on it, and unlock it after.
+		node.successors.Remove(entry)       // Remove it from the descendents queue.
+		node.successors.PushBack(node.Node) // Push back this node, to ensure the queue is not empty.
+		prev := entry.prev                  // Obtain the previous node of this queue node.
 		node.sucLock.Unlock()
 		// Return the previous node of this queue node.
 		return prev
 	}
 
-	// If the obtained successor is not this node.
-	if !Equals(suc.ID, node.ID) {
-		// If this queue node is the last one, push it at the end of queue.
-		if last {
-			node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
-			node.successors.PushBack(suc) // Push this successor in the queue.
-			node.sucLock.Unlock()
+	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
+	next = entry.next
+	inside = entry.inside
+	node.sucLock.RUnlock()
+
+	// If the obtained successor is not this node, and is not the same node.
+	if !Equals(suc.ID, node.ID) && !Equals(suc.ID, value.ID) {
+		// If this queue node still on the queue.
+		if inside {
+			// If this queue node is the last one, push its successor at the end of queue.
+			if next == nil {
+				node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
+				node.successors.PushBack(suc) // Push this successor in the queue.
+				node.sucLock.Unlock()
+			} else {
+				// Otherwise, fix next node of this queue node.
+				node.sucLock.Lock() // Lock the queue to write on it, and unlock it after.
+				next.value = suc    // Set this successor as value of the next node of this queue node.
+				node.sucLock.Unlock()
+			}
 		} else {
-			// Otherwise, fix next node of this queue node.
-			node.sucLock.Lock()    // Lock the queue to write on it, and unlock it after.
-			entry.next.value = suc // Set this successor as value of the next node of this queue node.
-			node.sucLock.Unlock()
+			// Otherwise, skip this node and continue with the next one.
+			return next
 		}
+	} else if Equals(suc.ID, value.ID) {
+		// If the node is equal than its successor, skip this node and continue with the next one.
+		return next
 	} else {
 		// Otherwise, if the obtained successor is this node, then the ring has already been turned around,
 		// so there are no more successors to add to the queue.
@@ -633,10 +645,6 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 		return nil
 	}
 
-	// Return the next node of this queue node.
-	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
-	next := entry.next   // Obtain the next node of this queue node.
-	node.sucLock.RUnlock()
 	log.Trace("Successor queue entry fixed.\n")
 	return next
 }
@@ -954,8 +962,13 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
 	log.Info("Set: key=" + req.Key + " value=" + string(req.Value) + ".\n")
 
-	// If this request is a replica, resolve it local.
-	if req.Replica {
+	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
+	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
+	// If this request is a replica from our predecessor, resolve it local.
+	if Equals(req.Replica, pred.ID) {
 		log.Debug("Resolving set request locally (replication).\n")
 
 		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
@@ -965,11 +978,6 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		log.Info("Successful set.\n")
 		return emptyResponse, nil
 	}
-
-	keyNode := node.Node  // By default, take this node to set the <key, value> pair on the local storage.
-	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
-	pred := node.predecessor
-	node.predLock.RUnlock()
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
@@ -1003,7 +1011,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 
 		// If successor is not this node, replicate the request to it.
 		if !Equals(suc.ID, node.ID) {
-			req.Replica = true
+			req.Replica = node.ID
 			log.Debug("Replicating set request to " + suc.Address + ".\n")
 			return emptyResponse, node.RPC.Set(suc, req)
 		}
@@ -1021,8 +1029,13 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
 	log.Info("Delete: key=" + req.Key + ".\n")
 
-	// If this request is a replica, resolve it local.
-	if req.Replica {
+	keyNode := node.Node  // By default, take this node to delete the <key, value> pair from the local storage.
+	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
+	pred := node.predecessor
+	node.predLock.RUnlock()
+
+	// If this request is a replica from our predecessor, resolve it local.
+	if Equals(req.Replica, pred.ID) {
 		log.Debug("Resolving delete request locally (replication).\n")
 
 		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
@@ -1032,11 +1045,6 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 		log.Info("Successful delete.\n")
 		return emptyResponse, nil
 	}
-
-	keyNode := node.Node  // By default, take this node to delete the <key, value> pair from the local storage.
-	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
-	pred := node.predecessor
-	node.predLock.RUnlock()
 
 	// If the key ID is not between this predecessor node ID and this node ID,
 	// then the requested key is not necessarily local.
@@ -1070,7 +1078,7 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 
 		// If successor is not this node, replicate the request to it.
 		if Equals(suc.ID, node.ID) {
-			req.Replica = true
+			req.Replica = node.ID
 			log.Debug("Replicating delete request to " + suc.Address + ".\n")
 			return emptyResponse, node.RPC.Delete(suc, req)
 		}

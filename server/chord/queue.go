@@ -44,11 +44,13 @@ func (queue *Queue[T]) PopBeg() *T {
 		return nil
 	}
 
-	value := queue.first.value
-	queue.first.inside = false
-	queue.first = queue.first.next
+	node := queue.first
+	queue.first = node.next
+	node.inside = false
+	node.next = nil
 	queue.size--
-	if queue.size != 0 {
+
+	if queue.size > 0 {
 		queue.first.prev = nil
 	}
 
@@ -56,7 +58,7 @@ func (queue *Queue[T]) PopBeg() *T {
 		queue.last = queue.first
 	}
 
-	return value
+	return node.value
 }
 
 func (queue *Queue[T]) PushBack(value *T) {
@@ -83,11 +85,13 @@ func (queue *Queue[T]) PopBack() *T {
 		return nil
 	}
 
-	value := queue.last.value
-	queue.last.inside = false
-	queue.last = queue.last.prev
+	node := queue.last
+	queue.last = node.prev
+	node.inside = false
+	node.prev = nil
 	queue.size--
-	if queue.size != 0 {
+
+	if queue.size > 0 {
 		queue.last.next = nil
 	}
 
@@ -95,18 +99,20 @@ func (queue *Queue[T]) PopBack() *T {
 		queue.first = queue.last
 	}
 
-	return value
+	return node.value
 }
 
 func (queue *Queue[T]) Remove(node *QueueNode[T]) {
 	if node.inside {
-		if node == queue.first {
+		if node.prev == nil {
 			queue.PopBeg()
-		} else if node == queue.last {
+		} else if node.next == nil {
 			queue.PopBack()
 		} else {
 			node.prev.next = node.next
 			node.next.prev = node.prev
+			node.next = nil
+			node.prev = nil
 			queue.size--
 		}
 	}
