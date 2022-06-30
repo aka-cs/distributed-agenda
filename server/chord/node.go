@@ -404,7 +404,7 @@ func (node *Node) CheckPredecessor() {
 			if !Equals(suc.ID, node.ID) {
 				// Lock the dictionary to read it, and unlock it after.
 				node.dictLock.RLock()
-				_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the predecessor keys.
+				in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the predecessor keys.
 				node.dictLock.RUnlock()
 				if err != nil {
 					log.Error("Error obtaining predecessor keys.\n")
@@ -412,7 +412,10 @@ func (node *Node) CheckPredecessor() {
 				}
 
 				log.Debug("Transferring old predecessor keys to the successor.\n")
+				log.Debug("Out:\n")
 				log.Debug(out)
+				log.Debug("In:\n")
+				log.Debug(in)
 				log.Debug("\n")
 
 				// Transfer the keys to this node successor.
@@ -512,7 +515,7 @@ func (node *Node) CheckSuccessor() {
 	// Transfer this node keys to the new successor.
 	// Lock the dictionary to read it, and unlock it after.
 	node.dictLock.RLock()
-	in, _, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
+	in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
 	node.dictLock.RUnlock()
 	if err != nil {
 		log.Error("Error obtaining this node keys.\n")
@@ -520,7 +523,10 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	log.Debug("Transferring keys to the new successor.\n")
+	log.Debug("In:\n")
 	log.Debug(in)
+	log.Debug("Out:\n")
+	log.Debug(out)
 	log.Debug("\n")
 
 	// Transfer the keys to the new successor, to update it.
@@ -722,7 +728,7 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 		log.Trace("Absorbing old predecessor's keys.\n")
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the old predecessor keys.
+		in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the old predecessor keys.
 		node.dictLock.RUnlock()
 		if err != nil {
 			message := "Error obtaining old predecessor keys.\n"
@@ -731,7 +737,10 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 		}
 
 		log.Debug("Transferring old predecessor keys to the successor.\n")
+		log.Debug("Out:\n")
 		log.Debug(out)
+		log.Debug("In:\n")
+		log.Debug(in)
 		log.Debug("\n")
 
 		// Transfer the old predecessor keys to this node successor.
@@ -765,7 +774,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		in, _, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
+		in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
 		node.dictLock.RUnlock()
 		if err != nil {
 			message := "Error obtaining this node keys.\n"
@@ -774,7 +783,10 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 		}
 
 		log.Debug("Transferring keys to the new successor.\n")
+		log.Debug("In:\n")
 		log.Debug(in)
+		log.Debug("Out:\n")
+		log.Debug(out)
 		log.Debug("\n")
 
 		// Transfer this node keys to the new successor, to update it.
@@ -818,7 +830,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		// Transfer to the new predecessor its corresponding keys.
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		_, out, err := node.dictionary.Partition(new.ID, node.ID) // Obtain the keys to transfer.
+		in, out, err := node.dictionary.Partition(new.ID, node.ID) // Obtain the keys to transfer.
 		node.dictLock.RUnlock()
 		if err != nil {
 			message := "Error obtaining the new predecessor corresponding keys.\n"
@@ -827,7 +839,10 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		}
 
 		log.Debug("Transferring keys to the new predecessor.\n")
+		log.Debug("Out:\n")
 		log.Debug(out)
+		log.Debug("In:\n")
+		log.Debug(in)
 		log.Debug("\n")
 
 		// Build the new predecessor dictionary, by transferring its correspondent keys.
