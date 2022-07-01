@@ -20,7 +20,7 @@ type RemoteNode struct {
 func (connection *RemoteNode) CloseConnection() {
 	err := connection.conn.Close() // Close the connection with the remote node server.
 	if err != nil {
-		log.Error("Error closing connection with a remote node.\n")
+		log.Error("Error closing connection with a remote node.\n" + err.Error() + "\n")
 		return
 	}
 }

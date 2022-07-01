@@ -1,5 +1,7 @@
 package chord
 
+import log "github.com/sirupsen/logrus"
+
 type Queue[T any] struct {
 	first    *QueueNode[T]
 	last     *QueueNode[T]
@@ -8,9 +10,10 @@ type Queue[T any] struct {
 }
 
 type QueueNode[T any] struct {
-	value *T
-	prev  *QueueNode[T]
-	next  *QueueNode[T]
+	value  *T
+	prev   *QueueNode[T]
+	next   *QueueNode[T]
+	inside bool
 }
 
 func NewQueue[T any](capacity int) *Queue[T] {
@@ -18,32 +21,36 @@ func NewQueue[T any](capacity int) *Queue[T] {
 }
 
 func (queue *Queue[T]) PushBeg(value *T) {
-	if queue.size == queue.capacity || value == nil {
-		return
+	if queue.size == queue.capacity {
+		queue.PopBack()
 	}
 
 	queue.size++
 
 	if queue.size == 1 {
-		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil}
+		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil, inside: true}
 		queue.last = queue.first
 		return
 	}
 
-	queue.first.prev = &QueueNode[T]{value: value, prev: nil, next: queue.first}
+	queue.first.prev = &QueueNode[T]{value: value, prev: nil, next: queue.first, inside: true}
 	queue.first = queue.first.prev
 	return
 }
 
 func (queue *Queue[T]) PopBeg() *T {
 	if queue.size == 0 {
+		log.Error("Cannot pop: queue empty.\n")
 		return nil
 	}
 
-	value := queue.first.value
-	queue.first = queue.first.next
+	node := queue.first
+	queue.first = node.next
+	node.inside = false
+	node.next = nil
 	queue.size--
-	if queue.size != 0 {
+
+	if queue.size > 0 {
 		queue.first.prev = nil
 	}
 
@@ -51,36 +58,40 @@ func (queue *Queue[T]) PopBeg() *T {
 		queue.last = queue.first
 	}
 
-	return value
+	return node.value
 }
 
 func (queue *Queue[T]) PushBack(value *T) {
-	if queue.size == queue.capacity || value == nil {
-		return
+	if queue.size == queue.capacity {
+		queue.PopBeg()
 	}
 
 	queue.size++
 
 	if queue.size == 1 {
-		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil}
+		queue.first = &QueueNode[T]{value: value, prev: nil, next: nil, inside: true}
 		queue.last = queue.first
 		return
 	}
 
-	queue.last.next = &QueueNode[T]{value: value, prev: queue.last, next: nil}
+	queue.last.next = &QueueNode[T]{value: value, prev: queue.last, next: nil, inside: true}
 	queue.last = queue.last.next
 	return
 }
 
 func (queue *Queue[T]) PopBack() *T {
 	if queue.size == 0 {
+		log.Error("Cannot pop: queue empty.\n")
 		return nil
 	}
 
-	value := queue.last.value
-	queue.last = queue.last.prev
+	node := queue.last
+	queue.last = node.prev
+	node.inside = false
+	node.prev = nil
 	queue.size--
-	if queue.size != 0 {
+
+	if queue.size > 0 {
 		queue.last.next = nil
 	}
 
@@ -88,19 +99,27 @@ func (queue *Queue[T]) PopBack() *T {
 		queue.first = queue.last
 	}
 
-	return value
+	return node.value
 }
 
 func (queue *Queue[T]) Remove(node *QueueNode[T]) {
-	if node == queue.first {
-		queue.PopBeg()
-	} else if node == queue.last {
-		queue.PopBack()
-	} else {
-		node.prev.next = node.next
-		node.next.prev = node.prev
-		queue.size--
+	if node.inside {
+		if node.prev == nil {
+			queue.PopBeg()
+		} else if node.next == nil {
+			queue.PopBack()
+		} else {
+			node.prev.next = node.next
+			node.next.prev = node.prev
+			node.next = nil
+			node.prev = nil
+			queue.size--
+		}
 	}
+}
+
+func (queue *Queue[T]) Empty() bool {
+	return queue.size == 0
 }
 
 func (queue *Queue[T]) Fulfilled() bool {

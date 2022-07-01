@@ -37,6 +37,8 @@ func DefaultConfig() *Configuration {
 		Hash:             sha1.New,
 		HashSize:         HashSize,
 		DialOpts:         DialOpts,
+		Timeout:          100 * time.Millisecond,
+		MaxIdle:          1 * time.Second,
 		StabilizingNodes: 5,
 	}
 
