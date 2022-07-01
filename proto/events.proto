@@ -1,12 +1,15 @@
 syntax="proto3";
 
 import "proto/users.proto";
+import "google/protobuf/timestamp.proto";
 
 package distributed_agenda;
 option go_package = "./server/proto";
 
 message Event{
     int64 id = 1;
+    google.protobuf.Timestamp start = 2;
+    google.protobuf.Timestamp end = 3;
 }
 
 message GetEventRequest{

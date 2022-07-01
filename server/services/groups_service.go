@@ -190,7 +190,6 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 	log.Debugf("Get Group Users invoked with %v\n", request)
 
 	groupID := request.GetGroupID()
-	level := request.GetLevel()
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
@@ -200,21 +199,24 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 		return err
 	}
 
-	for key := range groupMembers[level] {
-		user, err := persistency.Load[proto.User](filepath.Join("User", key))
+	for level := range groupMembers {
+		for key := range groupMembers[level] {
+			user, err := persistency.Load[proto.User](filepath.Join("User", key))
 
-		if err != nil {
-			return err
-		}
+			if err != nil {
+				return err
+			}
 
-		err = server.Send(&proto.GetGroupUsersResponse{User: &user})
+			user.PasswordHash = ""
 
-		if err != nil {
-			log.Errorf("Error sending response GroupUser:\n%v\n", err)
-			return status.Error(codes.Internal, "Error sending response")
+			err = server.Send(&proto.GetGroupUsersResponse{User: &user, Level: level})
+
+			if err != nil {
+				log.Errorf("Error sending response GroupUser:\n%v\n", err)
+				return status.Error(codes.Internal, "Error sending response")
+			}
 		}
 	}
-
 	return nil
 }
 

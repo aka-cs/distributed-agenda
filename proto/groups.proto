@@ -34,7 +34,6 @@ message DeleteGroupRequest{
 
 message GetGroupUsersRequest{
   int64 groupID = 1;
-  UserLevel level = 2;
 }
 
 message AddUserRequest{
@@ -67,6 +66,7 @@ message DeleteGroupResponse{
 
 message GetGroupUsersResponse{
   User user = 1;
+  UserLevel level = 2;
 }
 
 message AddUserResponse{
