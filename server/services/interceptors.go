@@ -20,10 +20,8 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 		return nil, err
 	}
 
-	// Calls the handler
 	h, err := handler(ctx, req)
 
-	// Logging with grpclog (grpclog.LoggerV2)
 	log.Debugf("Request completed - Method:%s\tDuration:%s\tError:%v\n",
 		info.FullMethod,
 		time.Since(start),
@@ -46,10 +44,8 @@ func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.S
 		return err
 	}
 
-	// Calls the handler
 	err = handler(srv, ss)
 
-	// Logging with grpclog (grpclog.LoggerV2)
 	log.Debugf("Streaming Request completed - Method:%s\tDuration:%s\tError:%v\n",
 		info.FullMethod,
 		time.Since(start),

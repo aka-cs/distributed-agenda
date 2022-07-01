@@ -17,11 +17,9 @@ enum Action{
 
 message HistoryEntry{
   Action action = 1;
-  oneof entity{
-    User user = 2;
-    Group group = 3;
-    Event event = 4;
-  }
+  User user = 2;
+  Group group = 3;
+  Event event = 4;
 }
 
 message AddHistoryEntryRequest{
