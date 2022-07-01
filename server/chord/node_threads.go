@@ -11,8 +11,8 @@ import (
 // Stabilize this node.
 // To stabilize the node, the predecessor of the successor of this node is searched for.
 // If the obtained node is not this node, and it's closer to this node than its current successor,
-// then update this node taking the obtained node as the new successor.
-// Finally, notifies its new successor of this node existence, so that the successor will update itself.
+// then update this node taking that one as the new successor.
+// Finally, notifies this successor of this node existence, so that the successor will update itself.
 // The transfer of keys from this node to its successor to maintain replication is not necessary, since
 // the new successor at some point was a predecessor of the old successor, and received from it
 // the replicated keys of this node.
@@ -64,18 +64,18 @@ func (node *Node) PeriodicallyStabilize() {
 	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
-		case <-ticker.C:
-			node.Stabilize() // If it's time, stabilize the node.
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
+		case <-node.shutdown: // If node server is shutdown, stop the thread.
+			ticker.Stop()
 			return
+		case <-ticker.C: // If it's time, stabilize the node.
+			node.Stabilize()
 		}
 	}
 }
 
 // CheckPredecessor checks whether predecessor has failed.
 // To do this, make a remote Check call to the predecessor. If the call fails, the predecessor
-// is assumed dead, and it's updated to null.
+// is assumed dead, and it's updated to this node.
 // In this case, the keys of the predecessor are absorbed by the current node (these keys are currently
 // already replicated on it). Accordingly, the new keys are also sent to the successor of this node,
 // to maintain replication.
@@ -146,11 +146,11 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
-		case <-ticker.C:
-			node.CheckPredecessor() // If it's time, check if this node predecessor it's alive.
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
+		case <-node.shutdown: // If node server is shutdown, stop the thread.
+			ticker.Stop()
 			return
+		case <-ticker.C: // If it's time, check if this node predecessor it's alive.
+			node.CheckPredecessor()
 		}
 	}
 }
@@ -208,7 +208,7 @@ func (node *Node) CheckSuccessor() {
 			suc = node.successors.Beg() // Take the next successor in queue.
 			node.sucLock.Unlock()
 		} else {
-			// If successor still null, there is nothing to do.
+			// If there is no predecessor either, there is nothing to do.
 			log.Trace("There is no successor.\n")
 			return
 		}
@@ -250,11 +250,11 @@ func (node *Node) PeriodicallyCheckSuccessor() {
 	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
 		select {
-		case <-ticker.C:
-			node.CheckSuccessor() // If it's time, check if this node successor it's alive.
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
+		case <-node.shutdown: // If node server is shutdown, stop the thread.
+			ticker.Stop()
 			return
+		case <-ticker.C: // If it's time, check if this node successor it's alive.
+			node.CheckSuccessor()
 		}
 	}
 }
@@ -264,11 +264,11 @@ func (node *Node) FixFinger(index int) int {
 	log.Trace("Fixing finger entry.\n")
 
 	m := node.config.HashSize            // Obtain the finger table size.
-	ID := FingerID(node.ID, index, m)    // Obtain n + 2^(next) mod (2^m).
-	suc, err := node.FindIDSuccessor(ID) // Obtain the node that succeeds ID = n + 2^(next) mod (2^m).
+	ID := FingerID(node.ID, index, m)    // Obtain node.ID + 2^(next) mod(2^m).
+	suc, err := node.FindIDSuccessor(ID) // Obtain the node that succeeds ID = node.ID + 2^(next) mod(2^m).
 	// In case of error finding the successor, report the error and skip this finger.
 	if err != nil || suc == nil {
-		log.Error("Successor of ID not found.\nThis finger fix was skipped.\n")
+		log.Error("Successor of ID not found.\nThis finger fix was skipped.\n" + err.Error() + "\n")
 		// Return the next index to fix.
 		return (index + 1) % m
 	}
@@ -277,7 +277,7 @@ func (node *Node) FixFinger(index int) int {
 	if Equals(suc.ID, node.ID) {
 		for i := index; index < m; i++ {
 			node.fingerLock.Lock()        // Lock finger table to write on it, and unlock it after.
-			node.fingerTable[index] = nil // Clean the correspondent position.
+			node.fingerTable[index] = nil // Clean the correspondent position on the finger table.
 			node.fingerLock.Unlock()
 		}
 		return 0
@@ -291,7 +291,7 @@ func (node *Node) FixFinger(index int) int {
 	return (index + 1) % m
 }
 
-// PeriodicallyFixFinger periodically fix finger tables.
+// PeriodicallyFixFinger periodically fix finger table.
 func (node *Node) PeriodicallyFixFinger() {
 	log.Debug("Fix finger thread started.\n")
 
@@ -299,36 +299,36 @@ func (node *Node) PeriodicallyFixFinger() {
 	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
 	for {
 		select {
-		case <-ticker.C:
-			next = node.FixFinger(next) // If it's time, fix the correspondent finger table entry.
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
+		case <-node.shutdown: // If node server is shutdown, stop the thread.
+			ticker.Stop()
 			return
+		case <-ticker.C: // If it's time, fix the correspondent finger table entry.
+			next = node.FixFinger(next)
 		}
 	}
 }
 
-// FixDescendant fix an entry of the queue of successors.
-// Given a node of the successor queue, gets the reference to a remote node it contains and
-// make a remote call to GetSuccessor to get its successor.
-// If the call fails, assume the remote node is dead, and it's removed from the queue of successors.
-// In this case, return the previous node of this queue node, to fix this entry later.
+// FixSuccessor fix an entry of the queue of successors.
+// Given an entry of the successor queue, gets the reference to a remote node it contains and
+// makes a remote call to GetSuccessor to get its successor.
+// If the call fails, assume the remote node is dead, and remove this entry from the queue of successors.
+// In this case, return the previous entry of this one, to fix this entry later.
 // Otherwise, fix the next entry, updating its value with the obtained successor,
-// and return the next node of this queue node.
-func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.Node] {
+// and return the next entry of the queue.
+func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.Node] {
 	log.Trace("Fixing successor queue entry.\n")
 
 	// If the queue node is null, report error.
 	if entry == nil {
-		log.Error("Error fixing descendant entry: queue node argument cannot be null.\n")
+		log.Error("Error fixing successor queue entry: queue node argument cannot be null.\n")
 		return nil
 	}
 
-	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
-	value := entry.value // Obtain the successor contained in this queue node.
-	next := entry.next
-	inside := entry.inside
-	fulfilled := node.successors.Fulfilled()
+	node.sucLock.RLock()                     // Lock the queue to read it, and unlock it after.
+	value := entry.value                     // Obtain the successor contained in this queue node.
+	next := entry.next                       // Obtain the next node of this queue node.
+	inside := entry.inside                   // Check if this queue node still being inside the queue.
+	fulfilled := node.successors.Fulfilled() // Check if the queue is fulfilled.
 	node.sucLock.RUnlock()
 
 	// If the queue node is not inside the queue, return the next node.
@@ -346,7 +346,7 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 		log.Error(message + err.Error() + "\n")
 
 		node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
-		node.successors.Remove(entry) // Remove it from the descendents queue.
+		node.successors.Remove(entry) // Remove it from the queue of successors.
 		// Push back this node, to ensure the queue is not empty.
 		if node.successors.Empty() {
 			node.successors.PushBack(node.Node)
@@ -357,12 +357,12 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 		return prev
 	}
 
-	node.sucLock.RLock() // Lock the queue to read it, and unlock it after.
-	next = entry.next
-	inside = entry.inside
+	node.sucLock.RLock()  // Lock the queue to read it, and unlock it after.
+	next = entry.next     // Obtain the next node of this queue node.
+	inside = entry.inside // Check if this queue node still being inside the queue.
 	node.sucLock.RUnlock()
 
-	// If the obtained successor is not this node, and is not the same node.
+	// If the obtained successor is not this node, and is not the same node of this entry.
 	if !Equals(suc.ID, node.ID) && !Equals(suc.ID, value.ID) {
 		// If this queue node still on the queue.
 		if inside {
@@ -395,17 +395,18 @@ func (node *Node) FixDescendant(entry *QueueNode[chord.Node]) *QueueNode[chord.N
 	return next
 }
 
-// PeriodicallyFixDescendant periodically fix entries of the descendents queue.
-func (node *Node) PeriodicallyFixDescendant() {
-	log.Debug("Fix descendant thread started.\n")
+// PeriodicallyFixSuccessor periodically fix entries of the queue of successors.
+func (node *Node) PeriodicallyFixSuccessor() {
+	log.Debug("Fix successor thread started.\n")
 
 	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
 	var entry *QueueNode[chord.Node] = nil           // Queue node entry for iterations.
-
 	for {
 		select {
-		case <-ticker.C:
-			// If it's time, fix an entry of the queue.
+		case <-node.shutdown: // If node server is shutdown, stop the thread.
+			ticker.Stop()
+			return
+		case <-ticker.C: // If it's time, fix an entry of the queue.
 			// Lock the successor to read it, and unlock it after.
 			node.sucLock.RLock()
 			suc := node.successors.Beg() // Obtain this node successor.
@@ -422,49 +423,52 @@ func (node *Node) PeriodicallyFixDescendant() {
 					entry = node.successors.first
 					node.sucLock.RUnlock()
 				}
-				entry = node.FixDescendant(entry)
+				entry = node.FixSuccessor(entry) // Fix the corresponding entry.
 			} else {
-				// Otherwise, reset the queue node entry.
-				entry = nil
+				entry = nil // Otherwise, reset the queue node entry.
 			}
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
-			return
 		}
 	}
 }
 
 // FixStorage fix a particular key location on storage dictionary.
+// To do this, it locates the node that corresponds to this key.
+// If the node is this node, or its predecessor, then the key is correctly stored.
+// Otherwise, the key is in a bad location, and therefore it's relocated and deleted from this node storage.
 func (node *Node) FixStorage(key string) {
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
 	pred := node.predecessor
 	node.predLock.RUnlock()
 
-	keyNode, err := node.LocateKey(key)
+	keyNode, err := node.LocateKey(key) // Locate the node that corresponds to the key.
 	if err != nil {
+		log.Error("Error fixing local storage dictionary.\n" + err.Error() + "\n")
 		return
 	}
 
-	if !Equals(keyNode.ID, pred.ID) && !Equals(keyNode.ID, node.ID) {
+	// If the obtained node is not this node, neither this node predecessor, then it is bad located.
+	if !Equals(keyNode.ID, node.ID) && !Equals(keyNode.ID, pred.ID) {
+		// Lock the storage dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		value, err := node.dictionary.Get(key)
+		value, err := node.dictionary.Get(key) // Get the value associated to the key.
 		node.dictLock.RUnlock()
 		if err != nil {
+			// Don't report the error and return, because if the key is no longer in the dictionary
+			// then it's simply no longer necessary to relocate it.
 			return
 		}
 
+		// Set this <key, value> pair on the corresponding node.
 		err = node.RPC.Set(keyNode, &chord.SetRequest{Key: key, Value: value})
 		if err != nil {
 			return
 		}
 
+		// Lock the storage dictionary to write on it, and unlock it after.
 		node.dictLock.Lock()
-		node.dictionary.Delete(key)
+		node.dictionary.Delete(key) // Delete the key from local storage.
 		node.dictLock.Unlock()
-		if err != nil {
-			return
-		}
 	}
 }
 
@@ -472,36 +476,41 @@ func (node *Node) FixStorage(key string) {
 func (node *Node) PeriodicallyFixStorage() {
 	log.Debug("Fix storage thread started.\n")
 
-	next := 0                                        // Index of the actual storage entry to fix.
+	next := 0                                        // Index of the actual storage key to fix.
 	keys := make([]string, 0)                        // Keys to fix.
 	ticker := time.NewTicker(500 * time.Millisecond) // Set the time between routine activations.
 	for {
 		select {
-		case <-ticker.C:
+		case <-node.shutdown: // If node server is shutdown, stop the thread.
+			ticker.Stop()
+			return
+		case <-ticker.C: // If it's time, fix the correspondent storage entry.
+			// If there is no more keys to fix.
 			if next == len(keys) {
 				// Lock the predecessor to read it, and unlock it after.
 				node.predLock.RLock()
 				pred := node.predecessor
 				node.predLock.RUnlock()
 
+				// Lock the storage dictionary to read it, and unlock it after
 				node.dictLock.RLock()
-				_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the replicated keys.
+				_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the dictionary of replicated keys.
 				node.dictLock.RUnlock()
 				if err != nil {
+					log.Error("Error fixing local storage dictionary.\n" +
+						"Cannot obtain replicated keys on this node.\n" + err.Error() + "\n")
 					continue
 				}
 
-				keys = Keys(out)
-				next = 0
+				keys = Keys(out) // Obtain the replicated keys.
+				next = 0         // Reset the index of the key to fix.
 			}
 
+			// If there are remaining keys to fix.
 			if next < len(keys) {
-				node.FixStorage(keys[next]) // If it's time, fix the correspondent storage entry.
-				next++
+				node.FixStorage(keys[next]) // Fix the corresponding key.
+				next++                      // Update the index of the key to fix.
 			}
-		case <-node.shutdown:
-			ticker.Stop() // If node server is shutdown, stop the thread.
-			return
 		}
 	}
 }
