@@ -2,7 +2,6 @@ import asyncio as aio
 import logging
 
 import bcrypt
-import jwt
 import streamlit as st
 from grpclib import GRPCError
 
@@ -11,21 +10,8 @@ import proto.auth_pb2
 import proto.users_grpc
 import proto.users_pb2
 from rpc import services
-from rpc.client import Channel, TOKEN
+from rpc.client import Channel, TOKEN, logout, get_user
 from store import Store
-
-
-def get_user():
-    token = Store.disk_get(TOKEN)
-    if not token:
-        return None
-
-    with open('pub.pem', 'rb') as pub:
-        public_key = pub.read()
-
-    info = jwt.decode(token, public_key, algorithms=['RS256'])
-
-    return info
 
 
 async def app():
@@ -113,7 +99,3 @@ async def login(username:str, password: str):
         except GRPCError as error:
             logging.error(error.message)
             st.error(error.message)
-
-
-async def logout():
-    await Store.async_disk_delete(TOKEN)

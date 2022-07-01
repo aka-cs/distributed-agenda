@@ -1,5 +1,6 @@
 import os
 
+import shutil
 import aiofiles
 import streamlit as st
 
@@ -83,3 +84,14 @@ class Store:
         path = f'{user_path}/.distributed-agenda/{key}.txt'
         if os.path.exists(path):
             os.remove(path)
+
+    @staticmethod
+    def clear():
+        st.session_state.clear()
+
+        # remove all files at folder_path with shutil.rmtree
+        user_path = os.path.expanduser('~')
+        folder_path = f'{user_path}/.distributed-agenda'
+
+        if os.path.exists(folder_path):
+            shutil.rmtree(folder_path)
