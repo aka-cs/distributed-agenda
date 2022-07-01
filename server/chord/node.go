@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-// Node represent a Chord ring single node.
+// Node represents a Chord ring single node.
 type Node struct {
 	*chord.Node // Real node.
 
@@ -28,9 +28,9 @@ type Node struct {
 	dictionary Storage      // Storage dictionary of this node.
 	dictLock   sync.RWMutex // Locks the dictionary for reading or writing.
 
-	server   *grpc.Server // Node server.
-	sock     *net.TCPListener
-	shutdown chan struct{} // Determine if the node server is actually running.
+	server   *grpc.Server     // Node server.
+	sock     *net.TCPListener // Node server listener socket.
+	shutdown chan struct{}    // Determine if the node server is actually running.
 
 	chord.UnimplementedChordServer
 }
@@ -54,12 +54,12 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 	}
 
 	// Creates the new node with the obtained ID and same address.
-	innerNode := chord.Node{ID: id, Address: address}
+	innerNode := &chord.Node{ID: id, Address: address}
 
 	transport := NewGRPCServices(configuration) // Creates the transport layer.
 
 	// Instantiates the node.
-	node := &Node{Node: &innerNode,
+	node := &Node{Node: innerNode,
 		predecessor: nil,
 		successors:  nil,
 		fingerTable: nil,
@@ -105,55 +105,62 @@ func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*c
 
 // SetPredecessor sets the predecessor of this node.
 func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
-	log.Trace("Setting node predecessor.\n")
+	log.Trace("Setting node predecessor to " + candidate.Address + ".\n")
 
-	// Lock the predecessor to read and write on it, and unlock it after.
-	node.predLock.Lock()
-	pred := node.predecessor
-	node.predecessor = candidate
-	node.predLock.Unlock()
+	// If the new predecessor is not this node, update this node successor.
+	if !Equals(candidate.ID, node.ID) {
+		// Lock the predecessor to read and write on it, and unlock it after.
+		node.predLock.Lock()
+		pred := node.predecessor
+		node.predecessor = candidate
+		node.predLock.Unlock()
 
-	// Lock the successor to read it, and unlock it after.
-	node.sucLock.RLock()
-	suc := node.successors.Beg()
-	node.sucLock.RUnlock()
+		// Lock the successor to read it, and unlock it after.
+		node.sucLock.RLock()
+		suc := node.successors.Beg()
+		node.sucLock.RUnlock()
 
-	// If successor exists, transfer the old predecessor keys to it, to maintain replication.
-	if !Equals(pred.ID, node.ID) && !Equals(suc.ID, node.ID) {
-		log.Trace("Absorbing old predecessor's keys.\n")
-		// Lock the dictionary to read it, and unlock it after.
-		node.dictLock.RLock()
-		in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the old predecessor keys.
-		node.dictLock.RUnlock()
-		if err != nil {
-			message := "Error obtaining old predecessor keys.\n"
-			log.Error(message)
-			return emptyResponse, errors.New(message + err.Error())
+		// If there was an old successor, and successor exists, transfer the old predecessor keys to
+		// this node successor, to maintain replication.
+		if !Equals(pred.ID, node.ID) && !Equals(suc.ID, node.ID) {
+			log.Trace("Absorbing old predecessor's keys.\n")
+			// Lock the dictionary to read it, and unlock it after.
+			node.dictLock.RLock()
+			in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the old predecessor keys.
+			node.dictLock.RUnlock()
+			if err != nil {
+				message := "Error obtaining old predecessor keys.\n"
+				log.Error(message)
+				return emptyResponse, errors.New(message + err.Error())
+			}
+
+			/////
+			log.Debug("Transferring old predecessor keys to the successor.\n")
+			log.Debug("Out:\n")
+			log.Debug(out)
+			log.Debug("In:\n")
+			log.Debug(in)
+			log.Debug("\n")
+
+			// Transfer the old predecessor keys to this node successor.
+			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
+			if err != nil {
+				message := "Error transferring keys to successor at " + suc.Address + ".\n"
+				log.Error(message)
+				return emptyResponse, errors.New(message + err.Error())
+			}
+			log.Trace("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
 		}
-
-		log.Debug("Transferring old predecessor keys to the successor.\n")
-		log.Debug("Out:\n")
-		log.Debug(out)
-		log.Debug("In:\n")
-		log.Debug(in)
-		log.Debug("\n")
-
-		// Transfer the old predecessor keys to this node successor.
-		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
-		if err != nil {
-			message := "Error transferring keys to successor at " + suc.Address + ".\n"
-			log.Error(message)
-			return emptyResponse, errors.New(message + err.Error())
-		}
-		log.Trace("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
+	} else {
+		log.Trace("Candidate predecessor is this same node. Update refused.\n")
 	}
 
 	return emptyResponse, nil
 }
 
-// SetSuccessor sets predecessor for this node.
+// SetSuccessor sets the successor of this node.
 func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
-	log.Trace("Setting node successor.\n")
+	log.Trace("Setting node successor to " + candidate.Address + ".\n")
 
 	// If the new successor is not this node, update this node successor.
 	if !Equals(candidate.ID, node.ID) {
@@ -177,7 +184,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 			return emptyResponse, errors.New(message + err.Error())
 		}
 
-		log.Debug("Transferring keys to the new successor.\n")
+		log.Debug("Transferring this node keys to the new successor.\n")
 		log.Debug("In:\n")
 		log.Debug(in)
 		log.Debug("Out:\n")
@@ -192,6 +199,8 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 			return emptyResponse, errors.New(message + err.Error())
 		}
 		log.Trace("Successful transfer of keys to the new successor.\n")
+	} else {
+		log.Trace("Candidate successor is this same node. Update refused.\n")
 	}
 
 	return emptyResponse, nil
@@ -222,7 +231,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		node.predecessor = new
 		node.predLock.Unlock()
 
-		// Transfer to the new predecessor its corresponding keys.
+		// Transfer the corresponding keys to the new predecessor.
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
 		in, out, err := node.dictionary.Partition(new.ID, node.ID) // Obtain the keys to transfer.
@@ -273,7 +282,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		if !Equals(pred.ID, node.ID) {
 			// Lock the dictionary to read it, and unlock it after.
 			node.dictLock.RLock()
-			_, out, err = node.dictionary.Partition(pred.ID, node.ID) // Obtain the keys to transfer.
+			_, out, err = node.dictionary.Partition(pred.ID, node.ID) // Obtain the keys to delete.
 			node.dictLock.RUnlock()
 			if err != nil {
 				message := "Error obtaining old predecessor keys replicated on this node.\n"
@@ -309,7 +318,7 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
 	log.Info("Get: key=" + req.Key + ".\n")
 
-	keyNode := node.Node  // By default, take this node to find the key in the local storage.
+	keyNode := node.Node  // By default, take this node to get the value of this key from the local storage.
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
 	node.predLock.RUnlock()
@@ -377,7 +386,7 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	// then the requested key is not necessarily local.
 	if between, err := KeyBetween(req.Key, node.config.Hash, pred.ID, node.ID); !between && err == nil {
 		log.Debug("Searching for the corresponding node.\n")
-		keyNode, err = node.LocateKey(req.Key) // Locate the node that stores the key.
+		keyNode, err = node.LocateKey(req.Key) // Locate the node that corresponds to the key.
 		if err != nil {
 			message := "Error setting key.\n"
 			log.Error(message)
@@ -486,9 +495,9 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	return emptyResponse, node.RPC.Delete(keyNode, req)
 }
 
-// Partition return all <key, values> pairs in a given interval from storage.
+// Partition returns all <key, values> pairs on this local storage, and on this local storage replication.
 func (node *Node) Partition(ctx context.Context, req *chord.EmptyRequest) (*chord.PartitionResponse, error) {
-	log.Trace("Getting an interval of keys from local storage dictionary.\n")
+	log.Trace("Getting all <key, values> pairs on this local storage.\n")
 
 	node.predLock.RLock() // Lock the predecessor to read it, and unlock it after.
 	pred := node.predecessor
@@ -498,19 +507,20 @@ func (node *Node) Partition(ctx context.Context, req *chord.EmptyRequest) (*chor
 	in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the <key, value> pairs of the storage.
 	node.dictLock.RUnlock()
 	if err != nil {
-		message := "Error getting an interval of keys from storage dictionary.\n"
+		message := "Error getting <key, values> pairs from this local storage.\n"
 		log.Error(message)
 		return &chord.PartitionResponse{}, errors.New(message + err.Error())
 	}
-	// Return the dictionary corresponding to the interval.
+	// Return the dictionary corresponding to this local storage, and the one corresponding
+	// to this local storage replication.
 	return &chord.PartitionResponse{In: in, Out: out}, err
 }
 
-// Extend the storage dictionary of this node with a list of <key, values> pairs.
+// Extend the local storage dictionary with a map of <key, values> pairs.
 func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.EmptyResponse, error) {
 	log.Trace("Extending local storage dictionary.\n")
 
-	// If there are no keys, return.
+	// If there are no keys to add, return.
 	if req.Dictionary == nil || len(req.Dictionary) == 0 {
 		return emptyResponse, nil
 	}
@@ -526,15 +536,15 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 	return emptyResponse, err
 }
 
-// Discard all <key, values> pairs in a given interval from storage.
+// Discard a list of keys from local storage dictionary.
 func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chord.EmptyResponse, error) {
-	log.Trace("Discarding an interval of keys from local storage dictionary.\n")
+	log.Trace("Discarding keys from local storage dictionary.\n")
 
 	node.dictLock.Lock()                     // Lock the dictionary to write on it, and unlock it after.
-	err := node.dictionary.Discard(req.Keys) // Set the <key, value> pairs on the storage.
+	err := node.dictionary.Discard(req.Keys) // Delete the keys from storage.
 	node.dictLock.Unlock()
 	if err != nil {
-		message := "Error discarding interval of keys from storage dictionary.\n"
+		message := "Error discarding keys from storage dictionary.\n"
 		log.Error(message)
 		return emptyResponse, errors.New(message + err.Error())
 	}

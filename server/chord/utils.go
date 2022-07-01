@@ -36,7 +36,7 @@ func Keys[T comparable, K any](dictionary map[T]K) []T {
 	return keys
 }
 
-// FingerID computes the offset by (n + 2^i) mod (2^m)
+// FingerID computes the offset by (n + 2^i) mod(2^m)
 func FingerID(n []byte, i int, m int) []byte {
 	// Convert the ID to a bigint
 	id := (&big.Int{}).SetBytes(n)
@@ -77,12 +77,12 @@ func KeyBetween(key string, hash func() hash.Hash, L, R []byte) (bool, error) {
 
 // Between checks if an ID is in the (L, R) interval, on the chord ring.
 func Between(ID, L, R []byte) bool {
-	// If L < R, return true if L < ID < R.
+	// If L <= R, return true if L < ID < R.
 	if bytes.Compare(L, R) <= 0 {
 		return bytes.Compare(L, ID) < 0 && bytes.Compare(ID, R) < 0
 	}
 
-	// If L >= R, this is a segment over the end of the ring.
+	// If L > R, this is a segment over the end of the ring.
 	// So, ID is between L and R if L < ID or ID < R.
 	return bytes.Compare(L, ID) < 0 || bytes.Compare(ID, R) < 0
 }
@@ -91,7 +91,7 @@ func HashKey(key string, hash func() hash.Hash) ([]byte, error) {
 	log.Trace("Hashing key: " + key + ".\n")
 	h := hash()
 	if _, err := h.Write([]byte(key)); err != nil {
-		log.Error("Error hashing key " + key + ": " + err.Error() + ".\n")
+		log.Error("Error hashing key " + key + ".\n" + err.Error() + ".\n")
 		return nil, err
 	}
 	value := h.Sum(nil)

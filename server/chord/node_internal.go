@@ -24,8 +24,8 @@ func (node *Node) Start() error {
 
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 
-	// Start listening at correspondent address.
-	log.Debug("Trying to listen at the correspondent address.\n")
+	// Start listening at corresponding address.
+	log.Debug("Trying to listen at corresponding address.\n")
 	listener, err := net.Listen("tcp", node.Address)
 	if err != nil {
 		message := "Error starting server: cannot listen at the address " + node.Address + ".\n"
@@ -59,8 +59,9 @@ func (node *Node) Start() error {
 	go node.PeriodicallyCheckPredecessor()
 	go node.PeriodicallyCheckSuccessor()
 	go node.PeriodicallyStabilize()
-	go node.PeriodicallyFixDescendant()
+	go node.PeriodicallyFixSuccessor()
 	go node.PeriodicallyFixFinger()
+	go node.PeriodicallyFixStorage()
 
 	log.Info("Server started.\n")
 	return nil
@@ -117,16 +118,16 @@ func (node *Node) Stop() error {
 		return errors.New(message + err.Error())
 	}
 
-	node.server.Stop() // Stop serving at the opened socket.
+	node.server.Stop() // Stop node server.
 
 	close(node.shutdown) // Report the node server is shutdown.
 	log.Info("Server closed.\n")
 	return nil
 }
 
-// Listen for inbound connections
+// Listen for inbound connections.
 func (node *Node) Listen() {
-	log.Debug("Start serving at the opened socket.\n")
+	log.Debug("Starting to serve at the opened socket.\n")
 	err := node.server.Serve(node.sock)
 	if err != nil {
 		log.Error("Cannot serve at " + node.Address + ".\n" + err.Error() + "\n")
@@ -138,7 +139,7 @@ func (node *Node) Listen() {
 // To join the node to the ring, the immediate successor of this node ID in the ring is searched,
 // starting from the known node, and the obtained node is taken as the successor of this node.
 // The keys corresponding to this node will be transferred by its successor, from the Notify
-// method that is called at the end of this method.
+// method that is called at the end of Stabilize method.
 func (node *Node) Join(knownNode *chord.Node) error {
 	log.Info("Joining to chord ring.\n")
 
@@ -174,8 +175,10 @@ func (node *Node) Join(knownNode *chord.Node) error {
 }
 
 // FindIDSuccessor finds the node that succeeds ID.
-// To find it, the node with ID smaller than this ID and closest to this ID is searched,
-// using the finger table. Then, its successor is found and returned.
+// To find it, the known node with ID less than this ID and closest to this ID is searched,
+// using the finger table.
+// If the obtained node is this node, returns this node successor.
+// Otherwise, returns the result of the same remote call from the obtained node.
 func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	log.Trace("Finding ID successor.\n")
 
@@ -186,7 +189,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 		return nil, errors.New(message)
 	}
 
-	// Look on the FingerTable to found the closest finger with ID lower than this ID.
+	// Find the closest finger, on this finger table, with ID less than this ID.
 	pred := node.ClosestFinger(id)
 
 	// If the corresponding finger is this node, return this node successor.
@@ -235,13 +238,13 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 	return suc, nil
 }
 
-// ClosestFinger find the closest finger preceding this ID.
+// ClosestFinger find the closest finger preceding the given ID.
 func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 	log.Trace("Finding the closest finger preceding this ID.\n")
 	defer log.Trace("Closest finger found.\n")
 
 	// Iterate the finger table in reverse, and return the first finger
-	// such that the finger ID is between this node ID and the parameter ID.
+	// such that the finger ID is between this node ID and the given ID.
 	for i := len(node.fingerTable) - 1; i >= 0; i-- {
 		node.fingerLock.RLock()
 		finger := node.fingerTable[i]

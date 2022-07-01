@@ -15,8 +15,8 @@ type Storage interface {
 }
 
 type Dictionary struct {
-	data map[string][]byte
-	Hash func() hash.Hash // Hash function to use
+	data map[string][]byte // Internal dictionary
+	Hash func() hash.Hash  // Hash function to use
 }
 
 func NewDictionary(hash func() hash.Hash) *Dictionary {
