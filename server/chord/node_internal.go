@@ -59,7 +59,7 @@ func (node *Node) Start() error {
 	go node.PeriodicallyCheckPredecessor()
 	go node.PeriodicallyCheckSuccessor()
 	go node.PeriodicallyStabilize()
-	go node.PeriodicallyFixDescendant()
+	go node.PeriodicallyFixSuccessor()
 	go node.PeriodicallyFixFinger()
 	go node.PeriodicallyFixStorage()
 
