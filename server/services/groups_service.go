@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -275,7 +276,7 @@ func StartGroupService(network string, address string) {
 
 func updateGroupHistory(ctx context.Context, action proto.Action, group *proto.Group, users []string) error {
 
-	conn, err := grpc.Dial("0.0.0.0:50055")
+	conn, err := grpc.Dial("0.0.0.0:50055", grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if err != nil {
 		log.Fatal(err)
