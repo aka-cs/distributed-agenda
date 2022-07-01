@@ -147,6 +147,7 @@ func ValidateRequest(ctx context.Context) (*jwt.Token, error) {
 	}
 
 	jwtToken, ok := md["authorization"]
+
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "valid token required.")
 	}
