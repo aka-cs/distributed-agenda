@@ -273,14 +273,18 @@ func (node *Node) FixFinger(index int) int {
 		return (index + 1) % m
 	}
 	// If the successor of this ID is this node, then the ring has already been turned around.
-	// Return index 0 to restart the fixing cycle.
+	// Clean the remaining positions and return index 0 to restart the fixing cycle.
 	if Equals(suc.ID, node.ID) {
+		for i := index; index < m; i++ {
+			node.fingerLock.Lock()        // Lock finger table to write on it, and unlock it after.
+			node.fingerTable[index] = nil // Clean the correspondent position.
+			node.fingerLock.Unlock()
+		}
 		return 0
 	}
 
-	finger := &Finger{ID, suc}       // Create the correspondent finger with the obtained node.
-	node.fingerLock.Lock()           // Lock finger table to write on it, and unlock it after.
-	node.fingerTable[index] = finger // Update the correspondent position on the finger table.
+	node.fingerLock.Lock()        // Lock finger table to write on it, and unlock it after.
+	node.fingerTable[index] = suc // Update the correspondent position on the finger table.
 	node.fingerLock.Unlock()
 
 	// Return the next index to fix.
