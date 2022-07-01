@@ -1,5 +1,15 @@
 protoc := protoc
 python := python
+go := go
+make := make
+
+.PHONY: client
+client: py-protoc
+	$(make) -C ./client client python=$(python)
+
+.PHONY: server
+server: go-protoc
+	$(make) -C ./server server go=$(go)
 
 .PHONY: pbc
 pbc:go-protoc py-protoc;

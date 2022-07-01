@@ -2,13 +2,14 @@ package services
 
 import (
 	"context"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 	"net"
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
 )
 
 type EventsServer struct {
@@ -63,7 +64,8 @@ func StartEventService(network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
+
 	proto.RegisterEventsServiceServer(s, &EventsServer{})
 
 	if err := s.Serve(lis); err != nil {

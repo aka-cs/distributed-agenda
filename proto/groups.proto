@@ -20,6 +20,8 @@ message GetGroupRequest{
 
 message CreateGroupRequest{
   Group group = 1;
+  repeated string admins = 2;
+  repeated string users = 3;
 }
 
 message EditGroupRequest{
@@ -36,13 +38,13 @@ message GetGroupUsersRequest{
 }
 
 message AddUserRequest{
-  int64 userID = 1;
+  string userID = 1;
   int64 groupID = 2;
   UserLevel level = 3;
 }
 
 message RemoveUserRequest{
-  int64 userID = 1;
+  string userID = 1;
   int64 groupID = 2;
   UserLevel level = 3;
 }

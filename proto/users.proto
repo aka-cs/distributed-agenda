@@ -19,20 +19,12 @@ message GetUserRequest{
     string username = 1;
 }
 
-message CreateUserRequest{
-    User user = 1;
-}
-
 message EditUserRequest{
     User user = 1;
 }
 
 message GetUserResponse{
     User user = 1;
-}
-
-message CreateUserResponse{
-    OperationOutcome result = 1;
 }
 
 message EditUserResponse{
@@ -42,8 +34,6 @@ message EditUserResponse{
 service UserService{
 
     rpc GetUser(GetUserRequest) returns (GetUserResponse){}
-
-    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse){}
 
     rpc EditUser(EditUserRequest) returns (EditUserResponse){}
 }
