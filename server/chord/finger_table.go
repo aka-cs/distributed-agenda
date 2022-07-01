@@ -11,7 +11,7 @@ type FingerTable []*chord.Node
 func NewFingerTable(size int) FingerTable {
 	hand := make([]*chord.Node, size) // Build the new array of fingers.
 
-	// Build and then add the necessary fingers to the array.
+	// Initialize all fingers in null.
 	for i := range hand {
 		hand[i] = nil
 	}
