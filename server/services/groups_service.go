@@ -176,25 +176,9 @@ func (*GroupsServer) DeleteGroup(ctx context.Context, request *proto.DeleteGroup
 func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest) (*proto.AddUserResponse, error) {
 	log.Debugf("Add User invoked with %v\n", request)
 
-	username, err := getUsernameFromContext(ctx)
-
-	if err != nil {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
-	}
-
 	userID := request.GetUserID()
 	groupID := request.GetGroupID()
 	level := request.GetLevel()
-
-	isOwner, err := checkIsOwner(username, groupID)
-
-	if err != nil {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
-	}
-
-	if !isOwner {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "Only creator can add users")
-	}
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
@@ -202,6 +186,28 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 
 	if err != nil {
 		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	isOwner, err := checkIsOwner(username, groupID)
+
+	if err != nil {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	if level == proto.UserLevel_ADMIN && !isOwner {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "Only creator can add admins")
+	}
+
+	if level == proto.UserLevel_USER && len(groupMembers[proto.UserLevel_ADMIN]) != 0 {
+		if _, ok := groupMembers[proto.UserLevel_ADMIN][username]; !ok {
+			return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "Only admins can add users")
+		}
 	}
 
 	if _, ok := groupMembers[level][userID]; ok {
