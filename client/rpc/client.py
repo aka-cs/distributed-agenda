@@ -4,7 +4,7 @@ import jwt
 from grpclib.client import Channel as BaseChannel
 from grpclib.events import SendRequest, listen, RecvTrailingMetadata
 from grpclib.const import Status
-from store import Store
+from store import Storage
 
 
 def get_host():
@@ -15,7 +15,7 @@ TOKEN = 'token'
 
 
 def get_user():
-    token = Store.disk_get(TOKEN)
+    token = Storage.disk_get(TOKEN)
     if not token:
         return None
 
@@ -38,7 +38,7 @@ class Channel(BaseChannel):
 
     @staticmethod
     async def on_send_request(event: SendRequest):
-        token = await Store.async_disk_get('token')
+        token = await Storage.async_disk_get('token')
         if token:
             logging.info("Adding token to request")
             event.metadata['authorization'] = token
@@ -47,8 +47,8 @@ class Channel(BaseChannel):
     async def on_recv_trailing_metadata(event: RecvTrailingMetadata):
         if event.status == Status.UNAUTHENTICATED:
             logging.info("Token expired")
-            await Store.async_disk_delete('token')
+            await Storage.async_disk_delete('token')
 
 
 async def logout():
-    Store.clear()
+    Storage.clear()

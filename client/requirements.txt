@@ -1,9 +1,10 @@
-streamlit
+streamlit~=1.9.0
 streamlit-option-menu
-numpy
-pandas
-bcrypt
-PyJWT
-grpclib
+numpy~=1.22.3
+pandas~=1.4.2
+bcrypt~=3.2.2
+PyJWT~=2.4.0
+grpclib~=0.4.2
+aiofiles~=0.6.0
 cryptography
 certifi
