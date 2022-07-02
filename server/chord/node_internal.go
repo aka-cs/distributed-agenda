@@ -6,6 +6,8 @@ import (
 	"google.golang.org/grpc"
 	"net"
 	"server/chord/chord"
+	"strings"
+	"time"
 )
 
 // Node server internal methods.
@@ -62,6 +64,8 @@ func (node *Node) Start() error {
 	go node.PeriodicallyFixSuccessor()
 	go node.PeriodicallyFixFinger()
 	go node.PeriodicallyFixStorage()
+
+	ip, err := node.NetDiscover()
 
 	log.Info("Server started.\n")
 	return nil
@@ -257,4 +261,98 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 
 	// If no finger meets the conditions, return this node.
 	return node.Node
+}
+
+func (node *Node) BroadListen() {
+	pc, err := net.ListenPacket("udp4", ":8830")
+	for err != nil {
+		pc, err = net.ListenPacket("udp4", ":8830")
+	}
+
+	for {
+		if !IsOpen(node.shutdown) {
+			err = pc.Close()
+			if err != nil {
+				return
+			}
+			return
+		}
+
+		buf := make([]byte, 1024)
+		n, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			continue
+		}
+
+		log.Trace("%s sent this: %s\n", addr, buf[:n])
+
+		_, err = pc.WriteTo([]byte("Hello"), addr)
+		if err != nil {
+			continue
+		}
+	}
+}
+
+func (node *Node) NetDiscover() (string, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		log.Error("Error: " + err.Error())
+	}
+	for _, i := range interfaces {
+		address, err := i.Addrs()
+		if err != nil {
+			log.Error("Error: " + err.Error())
+		}
+		for _, addr := range address {
+			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+				if ipNet.IP.To4() != nil {
+					// create broadcast address from ipnet
+					ip := ipNet.IP.To4()
+					if ip[0] != 169 || ip[1] != 254 {
+						discovered, err := node.BroadCast(ip)
+						if err != nil || discovered == "" {
+							continue
+						}
+
+						return discovered, nil
+					}
+				}
+			}
+		}
+	}
+
+	return "", nil
+}
+
+func (node *Node) BroadCast(ip net.IP) (string, error) {
+	address := ip.String() + ":8830"
+	ip[3] = 255
+	broadcast := ip.String() + ":8830"
+
+	pc, err := net.ListenPacket("udp4", ":8830")
+	if err != nil {
+		return "", err
+	}
+
+	_, err = net.ResolveUDPAddr("udp4", broadcast)
+	if err != nil {
+		return "", err
+	}
+
+	buf := make([]byte, 1024)
+	err = pc.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err != nil {
+		return "", err
+	}
+
+	n, responder, err := pc.ReadFrom(buf)
+	if err != nil {
+		return "", err
+	}
+	if responder.String() == address {
+		return "", errors.New("")
+	}
+
+	log.Trace("%s sent this: %s\n", responder, buf[:n])
+	return strings.Split(responder.String(), ":")[0], nil
 }
