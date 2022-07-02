@@ -167,6 +167,9 @@ func checkValid(event *proto.Event, users []string) error {
 			if eve.Start.Seconds < event.End.Seconds && event.End.Seconds < eve.End.Seconds {
 				return status.Errorf(codes.Unavailable, "User %s already has plans", user)
 			}
+			if event.Start.Seconds < eve.Start.Seconds && eve.Start.Seconds < event.End.Seconds {
+				return status.Errorf(codes.Unavailable, "User %s already has plans", user)
+			}
 		}
 	}
 	return nil
