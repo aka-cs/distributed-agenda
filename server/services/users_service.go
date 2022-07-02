@@ -34,7 +34,7 @@ func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (
 	err := persistency.Save(user, filepath.Join("User", user.Username))
 
 	if err != nil {
-		return &proto.EditUserResponse{}, err
+		return nil, err
 	}
 
 	return &proto.EditUserResponse{}, nil
