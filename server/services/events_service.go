@@ -44,11 +44,18 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 
 	users := make(map[string]void)
 
-	for _, member := range request.GetUsers() {
-		if _, ok := users[member]; ok {
-			continue
+	if group := request.GetEvent().GetGroup(); group != nil {
+		usernames, err := getGroupUsernames(group)
+
+		if err != nil {
+			return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
 		}
-		users[member] = empty
+
+		for _, member := range usernames {
+			users[member] = empty
+		}
+	} else {
+		users[request.GetEvent().GetUser().GetUsername()] = empty
 	}
 
 	keys := make([]string, 0, len(users))
@@ -56,10 +63,10 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 		keys = append(keys, k)
 	}
 
-	err := checkValid(event, keys)
+	invalids, err := checkValid(event, keys)
 
 	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED, Unavailable: invalids}, err
 	}
 
 	err = persistency.Save(event, filepath.Join("Event", strconv.FormatInt(event.Id, 10)))
@@ -152,27 +159,33 @@ func updateEventHistory(ctx context.Context, action proto.Action, event *proto.E
 	return err
 }
 
-func checkValid(event *proto.Event, users []string) error {
+func checkValid(event *proto.Event, users []string) ([]string, error) {
+
+	invalid := make([]string, 0)
+
 	for _, user := range users {
 		events, err := getUserEvents(user)
 
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		for _, eve := range events {
 			if eve.Start.Seconds < event.Start.Seconds && event.Start.Seconds < eve.End.Seconds {
-				return status.Errorf(codes.Unavailable, "User %s already has plans", user)
-			}
-			if eve.Start.Seconds < event.End.Seconds && event.End.Seconds < eve.End.Seconds {
-				return status.Errorf(codes.Unavailable, "User %s already has plans", user)
-			}
-			if event.Start.Seconds < eve.Start.Seconds && eve.Start.Seconds < event.End.Seconds {
-				return status.Errorf(codes.Unavailable, "User %s already has plans", user)
+				invalid = append(invalid, user)
+			} else if eve.Start.Seconds < event.End.Seconds && event.End.Seconds < eve.End.Seconds {
+				invalid = append(invalid, user)
+			} else if event.Start.Seconds < eve.Start.Seconds && eve.Start.Seconds < event.End.Seconds {
+				invalid = append(invalid, user)
 			}
 		}
 	}
-	return nil
+
+	if len(invalid) != 0 {
+		return invalid, status.Error(codes.Unavailable, "Some users already have plans")
+	}
+
+	return nil, nil
 }
 
 func getUserEvents(username string) ([]proto.Event, error) {

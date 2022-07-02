@@ -2,6 +2,7 @@ syntax="proto3";
 
 import "proto/users.proto";
 import "google/protobuf/timestamp.proto";
+import "proto/groups.proto";
 
 package distributed_agenda;
 option go_package = "./server/proto";
@@ -10,6 +11,11 @@ message Event{
     int64 id = 1;
     google.protobuf.Timestamp start = 2;
     google.protobuf.Timestamp end = 3;
+    string name = 4;
+    string description = 5;
+    Group group = 6;
+    User user = 7;
+    bool draft = 8;
 }
 
 message GetEventRequest{
@@ -18,7 +24,6 @@ message GetEventRequest{
 
 message CreateEventRequest{
     Event event = 1;
-    repeated string users = 2;
 }
 
 message DeleteEventRequest{
@@ -31,6 +36,7 @@ message GetEventResponse{
 
 message CreateEventResponse{
     OperationOutcome result = 1;
+    repeated string unavailable = 2;
 }
 
 message DeleteEventResponse{

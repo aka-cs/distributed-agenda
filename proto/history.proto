@@ -13,6 +13,8 @@ enum Action{
   DELETE = 2;
   JOINED = 3;
   LEFT = 4;
+  CONFIRM = 5;
+  REJECT = 6;
 }
 
 message HistoryEntry{
