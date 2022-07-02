@@ -11,7 +11,8 @@ import (
 func PrintStorage(node *Node) {
 	response, err := node.Partition(nil, emptyRequest)
 	if err != nil {
-		log.Fatal(err.Error() + "Error obtaining storage dictionary.\n")
+		log.Info(err.Error() + "Error obtaining storage dictionary.\n")
+		return
 	}
 	in := response.In
 	message := "Storage: \n"
@@ -198,7 +199,7 @@ func Test() {
 		PrintFingers(node)
 	*/
 
-	Wait(time.Minute)
+	Wait(5 * time.Minute)
 
 	if node.Stop() != nil {
 		log.Fatal(err.Error() + "TERROR\n")

@@ -158,7 +158,7 @@ func (node *Node) Stop() error {
 
 // Listen for inbound connections.
 func (node *Node) Listen() {
-	log.Debug("Starting to serve at the opened socket.\n")
+	log.Info("Starting to serve at the opened socket.\n")
 	err := node.server.Serve(node.sock)
 	if err != nil {
 		log.Error("Cannot serve at " + node.IP + ".\n" + err.Error() + "\n")
