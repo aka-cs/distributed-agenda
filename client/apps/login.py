@@ -78,7 +78,7 @@ async def signup(username: str, password: str, name: str, email: str):
         stub = proto.auth_grpc.AuthStub(channel)
         try:
             response = await stub.SignUp(request)
-            logging.info(f"User created with response result: {response.result}")
+            logging.info(f"User created with response: {response}")
             st.success("User created!")
             return True
         except GRPCError as error:

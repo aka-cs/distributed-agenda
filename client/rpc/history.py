@@ -53,7 +53,10 @@ async def update_history():
                 await Storage.async_disk_store(HISTORY, json.dumps(history, cls=HistoryEncoder, indent=2))
             except GRPCError as err:
                 logging.error(f'An error occurred retrieving the full history: {err.status}: {err.message}')
-                raise err
+                # raise err
+            except OSError as err:
+                logging.error(f'An error occurred retrieving the full history: {err}')
+                # raise err
 
         else:
             request = proto.history_pb2.GetHistoryFromOffsetRequest(username=user.get('name'), offset=offset)
@@ -65,7 +68,10 @@ async def update_history():
                 await Storage.async_disk_store(HISTORY, json.dumps(history, cls=HistoryEncoder, indent=2))
             except GRPCError as err:
                 logging.error(f'An error occurred retrieving the history from offset {offset}: {err.status}: {err.message}')
-                raise err
+                # raise err
+            except OSError as err:
+                logging.error(f'An error occurred retrieving the history from offset {offset}: {err}')
+                # raise err
 
 
 async def get_history() -> List[proto.history_pb2.HistoryEntry]:
