@@ -177,27 +177,29 @@ func Test() {
 	PrintSuccessors(node)
 	PrintFingers(node)
 
+	log.Info("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+
 	Wait(time.Minute)
 	PrintStorage(node)
 	PrintPredecessor(node)
 	PrintSuccessors(node)
 	PrintFingers(node)
 
-	/*
-		log.Info("Kill alert.\n")
+	log.Info("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
 
-		Wait(2 * time.Minute)
-		PrintStorage(node)
-		PrintPredecessor(node)
-		PrintSuccessors(node)
-		PrintFingers(node)
+	Wait(2 * time.Minute)
+	PrintStorage(node)
+	PrintPredecessor(node)
+	PrintSuccessors(node)
+	PrintFingers(node)
 
-		Wait(time.Minute)
-		PrintStorage(node)
-		PrintPredecessor(node)
-		PrintSuccessors(node)
-		PrintFingers(node)
-	*/
+	log.Info("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
+
+	Wait(time.Minute)
+	PrintStorage(node)
+	PrintPredecessor(node)
+	PrintSuccessors(node)
+	PrintFingers(node)
 
 	Wait(5 * time.Minute)
 
