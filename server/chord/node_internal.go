@@ -28,6 +28,7 @@ func (node *Node) Start() error {
 
 	ip := GetOutboundIP()
 	node.IP = ip.String()
+	log.Infof("Node address at %s:%s.\n", node.IP, node.Port)
 	id, err := HashKey(node.IP+":"+node.Port, node.config.Hash) // Obtain the ID relative to this address.
 	if err != nil {
 		message := "Error starting node: cannot hash node address.\n"
@@ -335,7 +336,7 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 
 	log.Info("UPD address resolved.\n")
 
-	_, err = pc.WriteTo([]byte("Hello"), out)
+	_, err = pc.WriteTo([]byte("AAAAAAAAAA"), out)
 	if err != nil {
 		return "", err
 	}
@@ -350,14 +351,17 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 
 	log.Info("Waiting for response.\n")
 
-	n, address, err := pc.ReadFrom(buf)
-	if err != nil {
-		log.Info("Deadline for response exceed.\n")
-		return "", nil
+	for i := 0; i < 2; i++ {
+		n, address, err := pc.ReadFrom(buf)
+
+		if err == nil && node.IP+":8830" != address.String() {
+			log.Infof("%s sent this: %s\n", address, buf[:n])
+			return strings.Split(address.String(), ":")[0], nil
+		}
 	}
 
-	log.Trace("%s sent this: %s\n", address, buf[:n])
-	return strings.Split(address.String(), ":")[0], nil
+	log.Info("Deadline for response exceed.\n")
+	return "", nil
 }
 
 func GetOutboundIP() net.IP {

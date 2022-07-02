@@ -38,8 +38,6 @@ type Node struct {
 
 // NewNode creates and returns a new Node.
 func NewNode(port string, configuration *Configuration, transport RemoteServices, storage Storage) (*Node, error) {
-	log.Info("Creating a new node.\n")
-
 	// If configuration is null, report error.
 	if configuration == nil {
 		message := "Error creating node: configuration cannot be null.\n"
@@ -60,8 +58,6 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 		dictionary:  storage,
 		server:      nil,
 		shutdown:    nil}
-
-	log.Info("Node created with the address.\n")
 
 	// Return the node.
 	return node, nil

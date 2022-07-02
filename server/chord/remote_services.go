@@ -56,8 +56,6 @@ type GRPCServices struct {
 
 // NewGRPCServices creates a new GRPCServices object.
 func NewGRPCServices(config *Configuration) *GRPCServices {
-	log.Info("Creating transport layer interface.\n")
-
 	// Create the GRPCServices object.
 	services := &GRPCServices{
 		Configuration: config,
@@ -65,7 +63,6 @@ func NewGRPCServices(config *Configuration) *GRPCServices {
 		shutdown:      nil,
 	}
 
-	log.Info("Transport layer interface created.\n")
 	// Return the GRPCServices object.
 	return services
 }
