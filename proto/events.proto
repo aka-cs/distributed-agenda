@@ -2,7 +2,6 @@ syntax="proto3";
 
 import "proto/users.proto";
 import "google/protobuf/timestamp.proto";
-import "proto/groups.proto";
 
 package distributed_agenda;
 option go_package = "./server/proto";
@@ -13,9 +12,8 @@ message Event{
     google.protobuf.Timestamp end = 3;
     string name = 4;
     string description = 5;
-    Group group = 6;
-    User user = 7;
-    bool draft = 8;
+    int64 groupId = 6;
+    bool draft = 7;
 }
 
 message GetEventRequest{

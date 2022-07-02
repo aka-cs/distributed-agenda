@@ -36,7 +36,15 @@ func (*EventsServer) GetEvent(_ context.Context, request *proto.GetEventRequest)
 func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEventRequest) (*proto.CreateEventResponse, error) {
 	log.Debugf("Create event invoked with %v\n", request)
 
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
 	event := request.GetEvent()
+
+	event.Draft = false
 
 	seed := rand.NewSource(time.Now().UnixNano())
 	generator := rand.New(seed)
@@ -44,8 +52,10 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 
 	users := make(map[string]void)
 
-	if group := request.GetEvent().GetGroup(); group != nil {
-		usernames, err := getGroupUsernames(group)
+	groupId := request.GetEvent().GetGroupId()
+
+	if group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(groupId, 10))); err != nil {
+		usernames, err := getGroupUsernames(&group)
 
 		if err != nil {
 			return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
@@ -54,8 +64,19 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 		for _, member := range usernames {
 			users[member] = empty
 		}
+
+		hierarchy, err := hasHierarchy(&group)
+
+		if err != nil {
+			return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		}
+
+		if !hierarchy {
+			event.Draft = true
+		}
+
 	} else {
-		users[request.GetEvent().GetUser().GetUsername()] = empty
+		users[username] = empty
 	}
 
 	keys := make([]string, 0, len(users))
@@ -81,6 +102,14 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 	}
 
 	updateEventHistory(ctx, proto.Action_CREATE, event, keys)
+
+	confirmations := make(map[string]int64)
+
+	err = persistency.Save(confirmations, filepath.Join("EventConfirmations", strconv.FormatInt(event.Id, 10)))
+
+	if err != nil {
+		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
 
 	return &proto.CreateEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }

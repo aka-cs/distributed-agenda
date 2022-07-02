@@ -408,3 +408,15 @@ func getUsernameFromContext(ctx context.Context) (string, error) {
 
 	return jwtToken.Claims.(jwt.MapClaims)["sub"].(string), nil
 }
+
+func hasHierarchy(group *proto.Group) (bool, error) {
+	path := filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10))
+
+	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
+
+	if err != nil {
+		return false, err
+	}
+
+	return len(groupMembers[proto.UserLevel_ADMIN]) != 0, nil
+}
