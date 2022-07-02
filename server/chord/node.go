@@ -48,7 +48,7 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 	}
 
 	// Creates the new node with the obtained ID and same address.
-	innerNode := &chord.Node{ID: big.NewInt(0).Bytes(), IP: "0.0.0.0:", Port: port}
+	innerNode := &chord.Node{ID: big.NewInt(0).Bytes(), IP: "0.0.0.0", Port: port}
 
 	// Instantiates the node.
 	node := &Node{Node: innerNode,

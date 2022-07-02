@@ -26,15 +26,25 @@ func (node *Node) Start() error {
 
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 
-	// Start listening at corresponding address.
-	log.Debug("Trying to listen at corresponding address.\n")
-	listener, err := net.Listen("tcp", node.Address)
+	ip := GetOutboundIP()
+	node.IP = ip.String()
+	id, err := HashKey(node.IP+":"+node.Port, node.config.Hash) // Obtain the ID relative to this address.
 	if err != nil {
-		message := "Error starting server: cannot listen at the address " + node.Address + ".\n"
+		message := "Error starting node: cannot hash node address.\n"
 		log.Error(message)
 		return errors.New(message + err.Error())
 	}
-	log.Debug("Listening at " + node.Address + ".\n")
+	node.ID = id
+
+	// Start listening at corresponding address.
+	log.Debug("Trying to listen at corresponding address.\n")
+	listener, err := net.Listen("tcp", node.IP+":"+node.Port)
+	if err != nil {
+		message := "Error starting server: cannot listen at the address " + node.IP + ".\n"
+		log.Error(message)
+		return errors.New(message + err.Error())
+	}
+	log.Debug("Listening at " + node.IP + ".\n")
 
 	node.successors = NewQueue[chord.Node](node.config.StabilizingNodes) // Create the successors queue.
 	node.successors.PushBack(node.Node)                                  // Set this node as its own successor.
@@ -57,6 +67,23 @@ func (node *Node) Start() error {
 	// Start serving at the opened socket.
 	go node.Listen()
 
+	discovered, err := node.NetDiscover(ip)
+	if err != nil {
+		message := "Error starting server: cannot discover net to connect.\n"
+		log.Error(message)
+		return errors.New(message + err.Error())
+	}
+	if discovered != "" {
+		err = node.Join(&chord.Node{IP: discovered, Port: node.Port})
+		if err != nil {
+			message := "Error joining to server.\n"
+			log.Error(message)
+			return errors.New(message + err.Error())
+		}
+	} else {
+		log.Info("Creating chord ring.\n")
+	}
+
 	// Start periodically threads.
 	go node.PeriodicallyCheckPredecessor()
 	go node.PeriodicallyCheckSuccessor()
@@ -64,16 +91,7 @@ func (node *Node) Start() error {
 	go node.PeriodicallyFixSuccessor()
 	go node.PeriodicallyFixFinger()
 	go node.PeriodicallyFixStorage()
-
-	ip, err := node.NetDiscover()
-	if err != nil {
-		message := "Error starting server: cannot discover net to connect.\n"
-		log.Error(message)
-		return errors.New(message + err.Error())
-	}
-	if ip != "" {
-
-	}
+	go node.BroadListen()
 
 	log.Info("Server started.\n")
 	return nil
@@ -109,7 +127,7 @@ func (node *Node) Stop() error {
 		// Change the predecessor of this node successor to this node predecessor.
 		err := node.RPC.SetPredecessor(suc, pred)
 		if err != nil {
-			message := "Error stopping server: error setting new predecessor of successor at " + suc.Address + ".\n"
+			message := "Error stopping server: error setting new predecessor of successor at " + suc.IP + ".\n"
 			log.Error(message)
 			return errors.New(message + err.Error())
 		}
@@ -117,7 +135,7 @@ func (node *Node) Stop() error {
 		// Change the successor of this node predecessor to this node successor.
 		err = node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
-			message := "Error stopping server: error setting new successor of predecessor at " + pred.Address + ".\n"
+			message := "Error stopping server: error setting new successor of predecessor at " + pred.IP + ".\n"
 			log.Error(message)
 			return errors.New(message + err.Error())
 		}
@@ -142,7 +160,7 @@ func (node *Node) Listen() {
 	log.Debug("Starting to serve at the opened socket.\n")
 	err := node.server.Serve(node.sock)
 	if err != nil {
-		log.Error("Cannot serve at " + node.Address + ".\n" + err.Error() + "\n")
+		log.Error("Cannot serve at " + node.IP + ".\n" + err.Error() + "\n")
 		return
 	}
 }
@@ -163,7 +181,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 		return errors.New(message)
 	}
 
-	log.Info("Known node address: " + knownNode.Address + ".\n")
+	log.Info("Known node address: " + knownNode.IP + ".\n")
 
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID) // Find the immediate successor of this node ID.
 	if err != nil {
@@ -182,7 +200,7 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	node.sucLock.Lock()
 	node.successors.PushBeg(suc) // Update this node successor with the obtained node.
 	node.sucLock.Unlock()
-	log.Info("Successful join. Successor node at " + suc.Address + ".\n")
+	log.Info("Successful join. Successor node at " + suc.IP + ".\n")
 	return nil
 }
 
@@ -217,7 +235,7 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	// from the remote node obtained.
 	suc, err := node.RPC.FindSuccessor(pred, id)
 	if err != nil {
-		message := "Error finding ID successor from finger at " + pred.Address + ".\n"
+		message := "Error finding ID successor from finger at " + pred.IP + ".\n"
 		log.Error(message + err.Error() + "\n")
 		return nil, errors.New(message + err.Error())
 	}
@@ -301,39 +319,7 @@ func (node *Node) BroadListen() {
 	}
 }
 
-func (node *Node) NetDiscover() (string, error) {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		log.Error("Error: " + err.Error())
-	}
-	for _, i := range interfaces {
-		address, err := i.Addrs()
-		if err != nil {
-			log.Error("Error: " + err.Error())
-		}
-		for _, addr := range address {
-			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-				if ipNet.IP.To4() != nil {
-					// create broadcast address from ipnet
-					ip := ipNet.IP.To4()
-					if ip[0] != 169 || ip[1] != 254 {
-						discovered, err := node.BroadCast(ip)
-						if err != nil || discovered == "" {
-							continue
-						}
-
-						return discovered, nil
-					}
-				}
-			}
-		}
-	}
-
-	return "", nil
-}
-
-func (node *Node) BroadCast(ip net.IP) (string, error) {
-	address := ip.String() + ":8830"
+func (node *Node) NetDiscover(ip net.IP) (string, error) {
 	ip[3] = 255
 	broadcast := ip.String() + ":8830"
 
@@ -353,14 +339,29 @@ func (node *Node) BroadCast(ip net.IP) (string, error) {
 		return "", err
 	}
 
-	n, responder, err := pc.ReadFrom(buf)
+	n, address, err := pc.ReadFrom(buf)
 	if err != nil {
-		return "", err
-	}
-	if responder.String() == address {
-		return "", errors.New("")
+		return "", nil
 	}
 
-	log.Trace("%s sent this: %s\n", responder, buf[:n])
-	return strings.Split(responder.String(), ":")[0], nil
+	log.Trace("%s sent this: %s\n", address, buf[:n])
+	return strings.Split(address.String(), ":")[0], nil
+}
+
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
 }
