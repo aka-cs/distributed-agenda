@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
@@ -27,6 +28,7 @@ type AuthServer struct {
 }
 
 func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) (*proto.LoginResponse, error) {
+
 	user, err := persistency.Load[proto.User](filepath.Join("User", request.GetUsername()))
 	if err != nil {
 		return nil, err
@@ -50,27 +52,26 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 	tokenString, err := token.SignedString(server.jwtPrivateKey)
 	if err != nil {
 		log.Errorf("Error creating token:\n%v\n", err)
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, "")
 	}
 
 	return &proto.LoginResponse{Token: tokenString}, nil
 }
 
 func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*proto.SignUpResponse, error) {
-	log.Debugf("SignUp invoked with %v\n", request)
 
 	user := request.GetUser()
 	user.Username = strings.ToLower(user.Username)
 	path := filepath.Join("User", user.Username)
 
 	if persistency.FileExists(path) {
-		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "Username is taken")
+		return &proto.SignUpResponse{}, status.Error(codes.AlreadyExists, "Username is taken")
 	}
 
 	err := persistency.Save(user, path)
 
 	if err != nil {
-		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.SignUpResponse{}, err
 	}
 
 	path = filepath.Join("History", user.Username)
@@ -78,10 +79,10 @@ func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*pro
 	err = persistency.Save([]proto.HistoryEntry{}, path)
 
 	if err != nil {
-		return &proto.SignUpResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.SignUpResponse{}, err
 	}
 
-	return &proto.SignUpResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.SignUpResponse{}, nil
 }
 
 func StartAuthServer(rsaPrivateKey string, network string, address string) {
@@ -101,7 +102,19 @@ func StartAuthServer(rsaPrivateKey string, network string, address string) {
 	if err != nil {
 		log.Fatalf("Error parsing the jwt private key:\n%v\n", err)
 	}
-	s := grpc.NewServer()
+
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				UnaryLoggingInterceptor,
+			),
+		), grpc.StreamInterceptor(
+			grpc_middleware.ChainStreamServer(
+				StreamLoggingInterceptor,
+			),
+		),
+	)
+
 	proto.RegisterAuthServer(s, &AuthServer{jwtPrivateKey: parsedKey})
 
 	if err := s.Serve(lis); err != nil {

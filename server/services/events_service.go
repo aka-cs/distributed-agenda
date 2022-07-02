@@ -2,14 +2,19 @@ package services
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"path/filepath"
 	"server/persistency"
 	"server/proto"
 	"strconv"
+	"time"
 
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type EventsServer struct {
@@ -17,7 +22,6 @@ type EventsServer struct {
 }
 
 func (*EventsServer) GetEvent(_ context.Context, request *proto.GetEventRequest) (*proto.GetEventResponse, error) {
-	log.Debugf("Get event invoked with %v\n", request)
 
 	id := request.GetId()
 	event, err := persistency.Load[proto.Event](filepath.Join("Event", strconv.FormatInt(id, 10)))
@@ -29,30 +33,246 @@ func (*EventsServer) GetEvent(_ context.Context, request *proto.GetEventRequest)
 	return &proto.GetEventResponse{Event: &event}, nil
 }
 
-func (*EventsServer) CreateEvent(_ context.Context, request *proto.CreateEventRequest) (*proto.CreateEventResponse, error) {
-	log.Debugf("Create event invoked with %v\n", request)
+func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEventRequest) (*proto.CreateEventResponse, error) {
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.CreateEventResponse{}, err
+	}
 
 	event := request.GetEvent()
-	err := persistency.Save(event, filepath.Join("Event", strconv.FormatInt(event.Id, 10)))
 
-	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	event.Draft = false
+
+	seed := rand.NewSource(time.Now().UnixNano())
+	generator := rand.New(seed)
+	event.Id = generator.Int63()
+
+	users := make(map[string]void)
+
+	groupId := request.GetEvent().GetGroupId()
+
+	if group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(groupId, 10))); err != nil {
+		usernames, err := getGroupUsernames(&group)
+
+		if err != nil {
+			return &proto.CreateEventResponse{}, err
+		}
+
+		for _, member := range usernames {
+			users[member] = empty
+		}
+
+		hierarchy, err := hasHierarchy(&group)
+
+		if err != nil {
+			return &proto.CreateEventResponse{}, err
+		}
+
+		if !hierarchy {
+			event.Draft = true
+		}
+
+	} else {
+		users[username] = empty
 	}
 
-	return &proto.CreateEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	keys := make([]string, 0, len(users))
+	for k := range users {
+		keys = append(keys, k)
+	}
+
+	invalids, err := checkValid(event, keys)
+
+	if err != nil {
+		return &proto.CreateEventResponse{Unavailable: invalids}, err
+	}
+
+	err = persistency.Save(event, filepath.Join("Event", strconv.FormatInt(event.Id, 10)))
+
+	if err != nil {
+		return &proto.CreateEventResponse{}, err
+	}
+
+	err = persistency.Save(users, filepath.Join("EventParticipants", strconv.FormatInt(event.Id, 10)))
+	if err != nil {
+		return &proto.CreateEventResponse{}, err
+	}
+
+	updateEventHistory(ctx, proto.Action_CREATE, event, keys)
+
+	confirmations := make(map[string]int64)
+
+	err = persistency.Save(confirmations, filepath.Join("EventConfirmations", strconv.FormatInt(event.Id, 10)))
+
+	if err != nil {
+		return &proto.CreateEventResponse{}, err
+	}
+
+	return &proto.CreateEventResponse{}, nil
 }
 
-func (*EventsServer) DeleteEvent(_ context.Context, request *proto.DeleteEventRequest) (*proto.DeleteEventResponse, error) {
-	log.Debugf("Delete Event invoked with %v\n", request)
+func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEventRequest) (*proto.DeleteEventResponse, error) {
 
 	id := request.GetId()
-	err := persistency.Delete(filepath.Join("Group", strconv.FormatInt(id, 10)))
+
+	path := filepath.Join("Event", strconv.FormatInt(id, 10))
+
+	event, err := persistency.Load[proto.Event](path)
 
 	if err != nil {
-		return &proto.DeleteEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteEventResponse{}, err
 	}
 
-	return &proto.DeleteEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.DeleteEventResponse{}, err
+	}
+
+	ppath := filepath.Join("EventParticipants", strconv.FormatInt(event.Id, 10))
+
+	members, err := persistency.Load[[]string](ppath)
+
+	if err != nil {
+		return &proto.DeleteEventResponse{}, err
+	}
+
+	err = persistency.Delete(ppath)
+
+	if err != nil {
+		return &proto.DeleteEventResponse{}, err
+	}
+
+	err = updateEventHistory(ctx, proto.Action_DELETE, &event, members)
+
+	if err != nil {
+		return &proto.DeleteEventResponse{}, err
+	}
+
+	return &proto.DeleteEventResponse{}, nil
+}
+
+func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.ConfirmEventResponse, error) {
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{}, err
+	}
+
+	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
+
+	confirmations, err := persistency.Load[map[string]bool](path)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{}, err
+	}
+
+	if _, ok := confirmations[username]; !ok {
+		return &proto.ConfirmEventResponse{}, status.Error(codes.PermissionDenied, "")
+	}
+
+	confirmations[username] = true
+
+	err = persistency.Save(confirmations, path)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{}, err
+	}
+
+	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
+
+	event, err := persistency.Load[proto.Event](path)
+
+	updateEventHistory(ctx, proto.Action_CONFIRM, &event, []string{username})
+
+	users := make([]string, 0)
+
+	for key := range confirmations {
+		if !confirmations[key] {
+			return &proto.ConfirmEventResponse{}, nil
+		}
+		users = append(users, key)
+	}
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{}, err
+	}
+
+	event.Draft = true
+
+	err = persistency.Save(&event, path)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{}, err
+	}
+
+	updateEventHistory(ctx, proto.Action_UPDATE, &event, users)
+
+	return &proto.ConfirmEventResponse{}, nil
+}
+
+func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.RejectEventResponse, error) {
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.RejectEventResponse{}, err
+	}
+
+	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
+
+	confirmations, err := persistency.Load[map[string]bool](path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{}, err
+	}
+
+	if _, ok := confirmations[username]; !ok {
+		return &proto.RejectEventResponse{}, status.Error(codes.PermissionDenied, "")
+	}
+
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{}, err
+	}
+
+	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
+
+	event, err := persistency.Load[proto.Event](path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{}, err
+	}
+
+	updateEventHistory(ctx, proto.Action_REJECT, &event, []string{username})
+
+	users := make([]string, 0)
+
+	for key := range confirmations {
+		users = append(users, key)
+	}
+
+	updateEventHistory(ctx, proto.Action_DELETE, &event, users)
+
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{}, err
+	}
+
+	path = filepath.Join("EventParticipants", strconv.FormatInt(request.GetEventId(), 10))
+
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{}, err
+	}
+
+	return &proto.RejectEventResponse{}, nil
 }
 
 func StartEventService(network string, address string) {
@@ -64,11 +284,94 @@ func StartEventService(network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				UnaryLoggingInterceptor,
+				UnaryServerInterceptor,
+			),
+		), grpc.StreamInterceptor(
+			grpc_middleware.ChainStreamServer(
+				StreamLoggingInterceptor,
+				StreamServerInterceptor,
+			),
+		),
+	)
 
 	proto.RegisterEventsServiceServer(s, &EventsServer{})
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
+}
+
+func updateEventHistory(ctx context.Context, action proto.Action, event *proto.Event, users []string) error {
+
+	history := &HistoryServer{}
+
+	_, err := history.AddHistoryEntry(ctx, &proto.AddHistoryEntryRequest{
+		Entry: &proto.HistoryEntry{
+			Action: action,
+			Event:  event,
+		},
+		Users: users,
+	})
+	return err
+}
+
+func checkValid(event *proto.Event, users []string) ([]string, error) {
+
+	invalid := make([]string, 0)
+
+	for _, user := range users {
+		events, err := getUserEvents(user)
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, eve := range events {
+			if eve.Start.Seconds < event.Start.Seconds && event.Start.Seconds < eve.End.Seconds {
+				invalid = append(invalid, user)
+			} else if eve.Start.Seconds < event.End.Seconds && event.End.Seconds < eve.End.Seconds {
+				invalid = append(invalid, user)
+			} else if event.Start.Seconds < eve.Start.Seconds && eve.Start.Seconds < event.End.Seconds {
+				invalid = append(invalid, user)
+			}
+		}
+	}
+
+	if len(invalid) != 0 {
+		return invalid, status.Error(codes.Unavailable, "Some users already have plans")
+	}
+
+	return nil, nil
+}
+
+func getUserEvents(username string) ([]proto.Event, error) {
+
+	answer := []proto.Event{}
+	events := make(map[int64]proto.Event)
+
+	entries, err := persistency.Load[[]proto.HistoryEntry](filepath.Join("History", username))
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.Event != nil {
+			if entry.Action == proto.Action_DELETE {
+				delete(events, entry.Event.Id)
+			} else if entry.Action == proto.Action_CREATE {
+				events[entry.Event.Id] = *entry.Event
+			}
+		}
+	}
+
+	for k := range events {
+		answer = append(answer, events[k])
+	}
+
+	return answer, nil
 }

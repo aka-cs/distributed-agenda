@@ -43,7 +43,7 @@ class MultiApp:
         st.set_page_config(layout='wide')
 
         with st.sidebar:
-            selected = option_menu("Main Menu" if not self.user else self.user['name'], list(self.apps.keys()), icons=['house', 'gear'],
+            selected = option_menu("Main Menu" if not self.user else self.user['name'], list(self.apps.keys()), icons=['house', 'gear', 'calendar-event', 'file-earmark-text'],
                                    menu_icon='cast', default_index=0)
         await self.apps[selected]()
 

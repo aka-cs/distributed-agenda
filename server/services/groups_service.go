@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -27,15 +27,16 @@ type GroupsServer struct {
 }
 
 func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroupRequest) (*proto.CreateGroupResponse, error) {
-	log.Debugf("Create group invoked with %v\n", request)
 
-	jwtToken, err := ValidateRequest(ctx)
+	username, err := getUsernameFromContext(ctx)
 
 	if err != nil {
-		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.Internal, "")
+		return &proto.CreateGroupResponse{}, status.Error(codes.Internal, "")
 	}
 
-	username := jwtToken.Claims.(jwt.MapClaims)["sub"].(string)
+	all_users := make(map[string]void)
+
+	all_users[username] = empty
 
 	group := request.GetGroup()
 
@@ -46,44 +47,66 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	err = persistency.Save(group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
 
 	if err != nil {
-		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateGroupResponse{}, err
 	}
 
 	members := make(map[proto.UserLevel]map[string]void)
 	members[proto.UserLevel_ADMIN] = make(map[string]void)
 	members[proto.UserLevel_USER] = make(map[string]void)
 
-	members[proto.UserLevel_ADMIN][username] = empty
+	if request.GetHierarchy() {
+		members[proto.UserLevel_ADMIN][username] = empty
+	} else {
+		members[proto.UserLevel_USER][username] = empty
+	}
 
 	for _, member := range request.GetUsers() {
+		if _, ok := all_users[member]; ok {
+			continue
+		}
 		members[proto.UserLevel_USER][member] = empty
+		all_users[member] = empty
 	}
-	for _, member := range request.GetAdmins() {
-		members[proto.UserLevel_ADMIN][member] = empty
+
+	if !request.GetHierarchy() {
+		for _, member := range request.GetAdmins() {
+			if _, ok := all_users[member]; ok {
+				continue
+			}
+			members[proto.UserLevel_ADMIN][member] = empty
+			all_users[member] = empty
+		}
 	}
 
 	err = persistency.Save(members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
 	if err != nil {
-		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateGroupResponse{}, err
 	}
 
-	users, err := getGroupUsernames(group)
+	if request.GetHierarchy() {
+		delete(all_users, username)
+		err = updateGroupHistory(ctx, proto.Action_CREATE, group, []string{username})
+
+		if err != nil {
+			return &proto.CreateGroupResponse{}, err
+		}
+	}
+
+	keys := make([]string, 0, len(all_users))
+	for k := range all_users {
+		keys = append(keys, k)
+	}
+
+	err = updateGroupHistory(ctx, proto.Action_JOINED, group, keys)
 
 	if err != nil {
-		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateGroupResponse{}, err
 	}
 
-	err = updateGroupHistory(ctx, proto.Action_CREATE, group, users)
-
-	if err != nil {
-		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
-	}
-
-	return &proto.CreateGroupResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.CreateGroupResponse{}, nil
 }
 
 func (*GroupsServer) GetGroup(_ context.Context, request *proto.GetGroupRequest) (*proto.GetGroupResponse, error) {
-	log.Debugf("Get group invoked with %v\n", request)
 
 	id := request.GetId()
 	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(id, 10)))
@@ -96,61 +119,58 @@ func (*GroupsServer) GetGroup(_ context.Context, request *proto.GetGroupRequest)
 }
 
 func (*GroupsServer) EditGroup(ctx context.Context, request *proto.EditGroupRequest) (*proto.EditGroupResponse, error) {
-	log.Debugf("Edit Group invoked with %v\n", request)
 
 	group := request.GetGroup()
 	err := persistency.Save(group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
 
 	if err != nil {
-		return &proto.EditGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.EditGroupResponse{}, err
 	}
 
 	usernames, err := getGroupUsernames(group)
 
 	if err != nil {
-		return &proto.EditGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.EditGroupResponse{}, err
 	}
 
 	updateGroupHistory(ctx, proto.Action_UPDATE, group, usernames)
 
-	return &proto.EditGroupResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.EditGroupResponse{}, nil
 }
 
 func (*GroupsServer) DeleteGroup(ctx context.Context, request *proto.DeleteGroupRequest) (*proto.DeleteGroupResponse, error) {
-	log.Debugf("Delete Group invoked with %v\n", request)
 
 	id := request.GetId()
 
 	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
-		return &proto.DeleteGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteGroupResponse{}, err
 	}
 
 	err = persistency.Delete(filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
-		return &proto.DeleteGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteGroupResponse{}, err
 	}
 
 	err = persistency.Delete(filepath.Join("GroupMembers", strconv.FormatInt(id, 10)))
 	if err != nil {
-		return &proto.DeleteGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteGroupResponse{}, err
 	}
 
 	usernames, err := getGroupUsernames(&group)
 
 	if err != nil {
-		return &proto.DeleteGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteGroupResponse{}, err
 	}
 
 	updateGroupHistory(ctx, proto.Action_DELETE, &group, usernames)
 
-	return &proto.DeleteGroupResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.DeleteGroupResponse{}, nil
 }
 
 func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest) (*proto.AddUserResponse, error) {
-	log.Debugf("Add User invoked with %v\n", request)
 
 	userID := request.GetUserID()
 	groupID := request.GetGroupID()
@@ -161,7 +181,33 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
 
 	if err != nil {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.AddUserResponse{}, err
+	}
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.AddUserResponse{}, err
+	}
+
+	isOwner, err := checkIsOwner(username, groupID)
+
+	if err != nil {
+		return &proto.AddUserResponse{}, err
+	}
+
+	if level == proto.UserLevel_ADMIN && !isOwner {
+		return &proto.AddUserResponse{}, status.Error(codes.PermissionDenied, "Only creator can add admins")
+	}
+
+	if level == proto.UserLevel_USER && len(groupMembers[proto.UserLevel_ADMIN]) != 0 {
+		if _, ok := groupMembers[proto.UserLevel_ADMIN][username]; !ok {
+			return &proto.AddUserResponse{}, status.Error(codes.PermissionDenied, "Only admins can add users")
+		}
+	}
+
+	if _, ok := groupMembers[level][userID]; ok {
+		return &proto.AddUserResponse{}, status.Error(codes.AlreadyExists, "User is already in group")
 	}
 
 	groupMembers[level][userID] = empty
@@ -169,29 +215,26 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 	err = persistency.Save(groupMembers, filepath.Join(path))
 
 	if err != nil {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.AddUserResponse{}, err
 	}
 
 	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(groupID, 10)))
 
 	if err != nil {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.AddUserResponse{}, err
 	}
 
 	err = updateGroupHistory(ctx, proto.Action_JOINED, &group, []string{userID})
 
 	if err != nil {
-		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.AddUserResponse{}, err
 	}
 
-	return &proto.AddUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.AddUserResponse{}, nil
 }
 
 func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server proto.GroupService_GetGroupUsersServer) error {
-	log.Debugf("Get Group Users invoked with %v\n", request)
-
 	groupID := request.GetGroupID()
-	level := request.GetLevel()
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
@@ -201,37 +244,54 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 		return err
 	}
 
-	for key := range groupMembers[level] {
-		user, err := persistency.Load[proto.User](filepath.Join("User", key))
+	for level := range groupMembers {
+		for key := range groupMembers[level] {
+			user, err := persistency.Load[proto.User](filepath.Join("User", key))
 
-		if err != nil {
-			return err
-		}
+			if err != nil {
+				return err
+			}
 
-		err = server.Send(&proto.GetGroupUsersResponse{User: &user})
+			user.PasswordHash = ""
 
-		if err != nil {
-			log.Errorf("Error sending response GroupUser:\n%v\n", err)
-			return status.Error(codes.Internal, "Error sending response")
+			err = server.Send(&proto.GetGroupUsersResponse{User: &user, Level: level})
+
+			if err != nil {
+				log.Errorf("Error sending response GroupUser:\n%v\n", err)
+				return status.Error(codes.Internal, "Error sending response")
+			}
 		}
 	}
-
 	return nil
 }
 
 func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRequest) (*proto.RemoveUserResponse, error) {
-	log.Debugf("Remove User invoked with %v\n", request)
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.RemoveUserResponse{}, err
+	}
 
 	userID := request.GetUserID()
 	groupID := request.GetGroupID()
 	level := request.GetLevel()
+
+	isOwner, err := checkIsOwner(username, groupID)
+
+	if err != nil {
+		return &proto.RemoveUserResponse{}, err
+	}
+
+	if !isOwner {
+		return &proto.RemoveUserResponse{}, status.Error(codes.PermissionDenied, "Only creator can remove users")
+	}
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
 	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
 
 	if err != nil {
-		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RemoveUserResponse{}, err
 	}
 
 	delete(groupMembers[level], userID)
@@ -239,22 +299,22 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 	err = persistency.Save(groupMembers, filepath.Join(path))
 
 	if err != nil {
-		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RemoveUserResponse{}, err
 	}
 
 	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(groupID, 10)))
 
 	if err != nil {
-		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RemoveUserResponse{}, err
 	}
 
 	err = updateGroupHistory(ctx, proto.Action_LEFT, &group, []string{userID})
 
 	if err != nil {
-		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RemoveUserResponse{}, err
 	}
 
-	return &proto.RemoveUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.RemoveUserResponse{}, nil
 }
 
 func StartGroupService(network string, address string) {
@@ -266,7 +326,20 @@ func StartGroupService(network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				UnaryLoggingInterceptor,
+				UnaryServerInterceptor,
+			),
+		), grpc.StreamInterceptor(
+			grpc_middleware.ChainStreamServer(
+				StreamLoggingInterceptor,
+				StreamServerInterceptor,
+			),
+		),
+	)
+
 	proto.RegisterGroupServiceServer(s, &GroupsServer{})
 
 	if err := s.Serve(lis); err != nil {
@@ -276,18 +349,12 @@ func StartGroupService(network string, address string) {
 
 func updateGroupHistory(ctx context.Context, action proto.Action, group *proto.Group, users []string) error {
 
-	conn, err := grpc.Dial("0.0.0.0:50055", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	history := &HistoryServer{}
 
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	c := proto.NewHistoryServiceClient(conn)
-	_, err = c.AddHistoryEntry(ctx, &proto.AddHistoryEntryRequest{
+	_, err := history.AddHistoryEntry(ctx, &proto.AddHistoryEntryRequest{
 		Entry: &proto.HistoryEntry{
 			Action: action,
-			Entity: &proto.HistoryEntry_Group{Group: group},
+			Group:  group,
 		},
 		Users: users,
 	})
@@ -312,4 +379,49 @@ func getGroupUsernames(group *proto.Group) ([]string, error) {
 	}
 
 	return usernames, nil
+}
+
+func checkIsOwner(username string, groupId int64) (bool, error) {
+
+	path := filepath.Join("History", username)
+
+	history, err := persistency.Load[[]proto.HistoryEntry](path)
+	if err != nil {
+		return false, err
+	}
+
+	count := 0
+
+	for i := 0; i < len(history); i++ {
+		if history[i].Group != nil && history[i].Group.Id == groupId {
+			if history[i].Action == proto.Action_CREATE {
+				count++
+			} else if history[i].Action == proto.Action_DELETE {
+				count--
+			}
+		}
+	}
+	return count != 0, nil
+}
+
+func getUsernameFromContext(ctx context.Context) (string, error) {
+	jwtToken, err := ValidateRequest(ctx)
+
+	if err != nil {
+		return "", err
+	}
+
+	return jwtToken.Claims.(jwt.MapClaims)["sub"].(string), nil
+}
+
+func hasHierarchy(group *proto.Group) (bool, error) {
+	path := filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10))
+
+	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
+
+	if err != nil {
+		return false, err
+	}
+
+	return len(groupMembers[proto.UserLevel_ADMIN]) != 0, nil
 }

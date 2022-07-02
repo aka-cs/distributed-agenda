@@ -26,3 +26,6 @@ server/resources
 *.pem
 /Dockerfile
 /docker-compose.yml
+
+# Python
+__pycache__

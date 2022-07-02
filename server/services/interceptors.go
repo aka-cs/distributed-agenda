@@ -6,13 +6,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/peer"
 )
 
 func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-
-	log.Debugf("Request received - Method:%s\n", info.FullMethod)
-
-	start := time.Now()
 
 	_, err := ValidateRequest(ctx)
 
@@ -20,10 +17,35 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 		return nil, err
 	}
 
-	// Calls the handler
 	h, err := handler(ctx, req)
 
-	// Logging with grpclog (grpclog.LoggerV2)
+	return h, err
+}
+
+func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+
+	ctx := ss.Context()
+
+	_, err := ValidateRequest(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	err = handler(srv, ss)
+
+	return err
+}
+
+func UnaryLoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	p, _ := peer.FromContext(ctx)
+
+	log.Debugf("Request received - Method:%s From:%s\n", info.FullMethod, p.Addr.String())
+
+	start := time.Now()
+
+	h, err := handler(ctx, req)
+
 	log.Debugf("Request completed - Method:%s\tDuration:%s\tError:%v\n",
 		info.FullMethod,
 		time.Since(start),
@@ -32,24 +54,18 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	return h, err
 }
 
-func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-
-	log.Debugf("Streaming Request received - Method:%s\n", info.FullMethod)
+func StreamLoggingInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 
 	ctx := ss.Context()
 
+	p, _ := peer.FromContext(ctx)
+
+	log.Debugf("Streaming request received - Method:%s From:%s\n", info.FullMethod, p.Addr.String())
+
 	start := time.Now()
 
-	_, err := ValidateRequest(ctx)
+	err := handler(srv, ss)
 
-	if err != nil {
-		return err
-	}
-
-	// Calls the handler
-	err = handler(srv, ss)
-
-	// Logging with grpclog (grpclog.LoggerV2)
 	log.Debugf("Streaming Request completed - Method:%s\tDuration:%s\tError:%v\n",
 		info.FullMethod,
 		time.Since(start),

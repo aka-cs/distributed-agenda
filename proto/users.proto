@@ -3,11 +3,6 @@ syntax="proto3";
 package distributed_agenda;
 option go_package = "./server/proto";
 
-enum OperationOutcome{
-    SUCCESS = 0;
-    FAILED = 1;
-}
-
 message User{
     string username = 1;
     string name = 2;
@@ -28,7 +23,7 @@ message GetUserResponse{
 }
 
 message EditUserResponse{
-    OperationOutcome result = 1;
+    
 }
 
 service UserService{

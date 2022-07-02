@@ -5,15 +5,15 @@ import aiofiles
 import streamlit as st
 
 
-class Store:
+class Storage:
 
     @staticmethod
     def store(key, value):
         st.session_state[key] = value
 
     @staticmethod
-    def get(key):
-        return st.session_state[key]
+    def get(key, default=None):
+        return st.session_state.get(key, default)
 
     @staticmethod
     def delete(key):
@@ -33,13 +33,13 @@ class Store:
             f.write(value)
 
     @staticmethod
-    def disk_get(key):
+    def disk_get(key, default=None):
         user_path = os.path.expanduser('~')
         file_path = f'{user_path}/.distributed-agenda/{key}.txt'
 
         # if file doesn't exist, return None
         if not os.path.exists(file_path):
-            return None
+            return default
 
         with open(file_path, 'r') as f:
             return f.read()
@@ -66,13 +66,13 @@ class Store:
 
     # same as disk_get but uses aiofiles
     @staticmethod
-    async def async_disk_get(key):
+    async def async_disk_get(key, default=None):
         user_path = os.path.expanduser('~')
         file_path = f'{user_path}/.distributed-agenda/{key}.txt'
 
         # if file doesn't exist, return None
         if not os.path.exists(file_path):
-            return None
+            return default
 
         async with aiofiles.open(file_path, 'r') as f:
             return await f.read()

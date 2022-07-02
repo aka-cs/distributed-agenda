@@ -12,6 +12,7 @@ enum UserLevel{
 
 message Group{
   int64 id = 1;
+  string name = 2;
 }
 
 message GetGroupRequest{
@@ -22,6 +23,7 @@ message CreateGroupRequest{
   Group group = 1;
   repeated string admins = 2;
   repeated string users = 3;
+  bool hierarchy = 4;
 }
 
 message EditGroupRequest{
@@ -34,7 +36,6 @@ message DeleteGroupRequest{
 
 message GetGroupUsersRequest{
   int64 groupID = 1;
-  UserLevel level = 2;
 }
 
 message AddUserRequest{
@@ -54,27 +55,23 @@ message GetGroupResponse{
 }
 
 message CreateGroupResponse{
-  OperationOutcome result = 1;
 }
 
 message EditGroupResponse{
-  OperationOutcome result = 1;
 }
 
 message DeleteGroupResponse{
-  OperationOutcome result = 1;
 }
 
 message GetGroupUsersResponse{
   User user = 1;
+  UserLevel level = 2;
 }
 
 message AddUserResponse{
-  OperationOutcome result = 1;
 }
 
 message RemoveUserResponse{
-  OperationOutcome result = 1;
 }
 
 service GroupService{

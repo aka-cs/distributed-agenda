@@ -19,7 +19,6 @@ message SignUpRequest{
 }
 
 message SignUpResponse{
-  OperationOutcome result = 1;
 }
 
 service Auth {

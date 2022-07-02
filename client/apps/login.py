@@ -11,14 +11,15 @@ import proto.users_grpc
 import proto.users_pb2
 from rpc import services
 from rpc.client import Channel, TOKEN, logout, get_user
-from store import Store
+from rpc.history import update_history
+from store import Storage
 
 
 async def app():
 
     loop = aio.get_event_loop()
 
-    token: str = await Store.async_disk_get(TOKEN)
+    token: str = await Storage.async_disk_get(TOKEN)
 
     if token:
 
@@ -54,6 +55,7 @@ async def app():
             if submitted:
                 result = await login(username, password)
                 if result:
+                    await update_history()
                     st.experimental_rerun()
 
 
@@ -93,7 +95,7 @@ async def login(username:str, password: str):
         stub = proto.auth_grpc.AuthStub(channel)
         try:
             response = await stub.Login(request)
-            await Store.async_disk_store(TOKEN, response.token)
+            await Storage.async_disk_store(TOKEN, response.token)
             logging.info('Login successful')
             return True
         except GRPCError as error:

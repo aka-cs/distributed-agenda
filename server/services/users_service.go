@@ -7,6 +7,7 @@ import (
 	"server/persistency"
 	"server/proto"
 
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -16,8 +17,6 @@ type UserServer struct {
 }
 
 func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
-	log.Debugf("Get user invoked with %v\n", request)
-
 	username := request.GetUsername()
 	user, err := persistency.Load[proto.User](filepath.Join("User", username))
 
@@ -25,20 +24,20 @@ func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*p
 		return nil, err
 	}
 
+	user.PasswordHash = ""
+
 	return &proto.GetUserResponse{User: &user}, nil
 }
 
 func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (*proto.EditUserResponse, error) {
-	log.Debugf("Edit user invoked with %v\n", request)
-
 	user := request.GetUser()
 	err := persistency.Save(user, filepath.Join("User", user.Username))
 
 	if err != nil {
-		return &proto.EditUserResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.EditUserResponse{}, err
 	}
 
-	return &proto.EditUserResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.EditUserResponse{}, nil
 }
 
 func StartUserService(network string, address string) {
@@ -50,7 +49,20 @@ func StartUserService(network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				UnaryLoggingInterceptor,
+				UnaryServerInterceptor,
+			),
+		), grpc.StreamInterceptor(
+			grpc_middleware.ChainStreamServer(
+				StreamLoggingInterceptor,
+				StreamServerInterceptor,
+			),
+		),
+	)
+
 	proto.RegisterUserServiceServer(s, &UserServer{})
 
 	if err := s.Serve(lis); err != nil {

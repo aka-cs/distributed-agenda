@@ -13,15 +13,15 @@ enum Action{
   DELETE = 2;
   JOINED = 3;
   LEFT = 4;
+  CONFIRM = 5;
+  REJECT = 6;
 }
 
 message HistoryEntry{
   Action action = 1;
-  oneof entity{
-    User user = 2;
-    Group group = 3;
-    Event event = 4;
-  }
+  User user = 2;
+  Group group = 3;
+  Event event = 4;
 }
 
 message AddHistoryEntryRequest{
@@ -30,7 +30,6 @@ message AddHistoryEntryRequest{
 }
 
 message AddHistoryEntryResponse{
-  OperationOutcome result = 1;
 }
 
 message GetFullHistoryRequest{

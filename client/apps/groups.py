@@ -1,8 +1,11 @@
+import logging
 from typing import List
 
 import streamlit as st
 
-from rpc.groups import get_all_groups, create_group
+from rpc.client import get_user
+from rpc.groups import get_all_groups, create_group, get_group_users, remove_user_from_group, add_user_to_group
+from rpc.history import update_history
 
 INPUTS = 'inputs'
 
@@ -10,11 +13,43 @@ INPUTS = 'inputs'
 async def app():
     st.title('Groups')
 
-    # st.radio with get_users_groups as options
-    groups = await get_user_groups()
-    st.radio(label='', options=groups)
+    current_user = get_user()
 
-    st.write('New Group')
+    # st.radio with get_users_groups as options
+    groups, owner = await get_user_groups()
+    if groups:
+        option = st.radio(label='', options=groups)
+        group = groups[option]
+        st.title(f'Group: {group.id}')
+        users, admins = await get_group_users(group.id)
+        users.sort(key=lambda x: x.username)
+        st.write('Participants:')
+
+        col_name, col_action = st.columns([1, 1])
+        for i, user in enumerate(users):
+            with col_name:
+                st.write(user.username)
+            if not owner.get(group.id):
+                continue
+            with col_action:
+                if user.username == current_user['sub']:
+                    st.write('This is you')
+                    continue
+                rm_btn = st.button('Remove', key=f'remove_{i}')
+                if rm_btn:
+                    await st_remove_user(group.id, user.username)
+                    st.experimental_rerun()
+
+        if owner.get(group.id) or not any(admins):
+            st.text_input(label='Add new participant', key='add_user')
+            add_btn = st.button('Add')
+            if add_btn:
+                await st_add_user(group.id)
+                st.experimental_rerun()
+
+    st.title('New Group')
+
+    st.checkbox('Claim yourself as owner', value=True, key='hierarchy')
 
     inputs = st.session_state.get(INPUTS, [])
 
@@ -25,7 +60,12 @@ async def app():
 
     clicked = st.button('Create Group')
     if clicked:
-        await create_group(users=inputs)
+        result = await st_create_group(users=inputs)
+        logging.info(f'result: {result}')
+        if result:
+            st.session_state[INPUTS] = []
+            await update_history()
+            st.experimental_rerun()
 
 
 def add_input():
@@ -56,6 +96,19 @@ def update_input(index):
 
 
 async def get_user_groups():
-    groups = await get_all_groups()
-    return groups
+    groups, owner = await get_all_groups()
+    return groups, owner
 
+
+async def st_create_group(users):
+    result = await create_group(users=users, hierarchy=st.session_state.get('hierarchy', False))
+    return result
+
+
+async def st_remove_user(group_id, username):
+    return await remove_user_from_group(group_id, username)
+
+
+async def st_add_user(group_id):
+    new_username = st.session_state['add_user']
+    return await add_user_to_group(group_id, new_username)

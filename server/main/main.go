@@ -7,7 +7,8 @@ import (
 )
 
 func main() {
-	log.SetLevel(log.DebugLevel)
+
+	log.SetLevel(log.InfoLevel)
 	log.SetFormatter(&easy.Formatter{
 		TimestampFormat: "15:04:05",
 		LogFormat:       "[%lvl%]: %time% - %msg%",
