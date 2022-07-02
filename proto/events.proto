@@ -18,6 +18,7 @@ message GetEventRequest{
 
 message CreateEventRequest{
     Event event = 1;
+    repeated string users = 2;
 }
 
 message DeleteEventRequest{

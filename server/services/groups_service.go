@@ -34,7 +34,11 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.Internal, "")
 	}
 
+	all_users := make(map[string]void)
+
 	username := jwtToken.Claims.(jwt.MapClaims)["sub"].(string)
+
+	all_users[username] = empty
 
 	group := request.GetGroup()
 
@@ -55,10 +59,18 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	members[proto.UserLevel_ADMIN][username] = empty
 
 	for _, member := range request.GetUsers() {
+		if _, ok := all_users[member]; ok {
+			continue
+		}
 		members[proto.UserLevel_USER][member] = empty
+		all_users[member] = empty
 	}
 	for _, member := range request.GetAdmins() {
+		if _, ok := all_users[member]; ok {
+			continue
+		}
 		members[proto.UserLevel_ADMIN][member] = empty
+		all_users[member] = empty
 	}
 
 	err = persistency.Save(members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
@@ -66,13 +78,12 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
 	}
 
-	users, err := getGroupUsernames(group)
-
-	if err != nil {
-		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+	keys := make([]string, 0, len(all_users))
+	for k := range all_users {
+		keys = append(keys, k)
 	}
 
-	err = updateGroupHistory(ctx, proto.Action_CREATE, group, users)
+	err = updateGroupHistory(ctx, proto.Action_CREATE, group, keys)
 
 	if err != nil {
 		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
