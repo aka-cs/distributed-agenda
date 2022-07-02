@@ -22,3 +22,7 @@ go-protoc:
 py-protoc:
 	$(python) -m grpc_tools.protoc --proto_path=. --python_out=./client --python_grpc_out=./client \
 	 --mypy_out=./client -I./client/ ./proto/*.proto
+
+.PHONY: chord-protoc
+chord-protoc:
+	$(make) -C ./server/chord chord-protoc
