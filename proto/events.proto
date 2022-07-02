@@ -41,6 +41,21 @@ message DeleteEventResponse{
     OperationOutcome result = 1;
 }
 
+message ConfirmEventRequest{
+    int64 eventId = 1;
+}
+
+message ConfirmEventResponse{
+    OperationOutcome result = 1;
+}
+
+message RejectEventRequest{
+    int64 eventId = 1;
+}
+
+message RejectEventResponse{
+    OperationOutcome result = 1;
+}
 
 service EventsService{
 
@@ -49,4 +64,8 @@ service EventsService{
     rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse){}
 
     rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse){}
+
+    rpc ConfirmEvent(ConfirmEventRequest) returns (ConfirmEventResponse){}
+
+    rpc RejectEvent(RejectEventRequest) returns (RejectEventResponse){}
 }

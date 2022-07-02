@@ -156,6 +156,129 @@ func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEvent
 	return &proto.DeleteEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
 }
 
+func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.ConfirmEventResponse, error) {
+	log.Debugf("Confirm event invoked with %v\n", request)
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
+
+	confirmations, err := persistency.Load[map[string]bool](path)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	if _, ok := confirmations[username]; !ok {
+		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "")
+	}
+
+	confirmations[username] = true
+
+	err = persistency.Save(confirmations, path)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
+
+	event, err := persistency.Load[proto.Event](path)
+
+	updateEventHistory(ctx, proto.Action_CONFIRM, &event, []string{username})
+
+	users := make([]string, 0)
+
+	for key := range confirmations {
+		if !confirmations[key] {
+			return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+		}
+		users = append(users, key)
+	}
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	event.Draft = true
+
+	err = persistency.Save(&event, path)
+
+	if err != nil {
+		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	updateEventHistory(ctx, proto.Action_UPDATE, &event, users)
+
+	return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+}
+
+func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.RejectEventResponse, error) {
+	log.Debugf("Reject event invoked with %v\n", request)
+
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
+
+	confirmations, err := persistency.Load[map[string]bool](path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	if _, ok := confirmations[username]; !ok {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "")
+	}
+
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
+
+	event, err := persistency.Load[proto.Event](path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	updateEventHistory(ctx, proto.Action_REJECT, &event, []string{username})
+
+	users := make([]string, 0)
+
+	for key := range confirmations {
+		users = append(users, key)
+	}
+
+	updateEventHistory(ctx, proto.Action_DELETE, &event, users)
+
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	path = filepath.Join("EventParticipants", strconv.FormatInt(request.GetEventId(), 10))
+
+	err = persistency.Delete(path)
+
+	if err != nil {
+		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	return &proto.RejectEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+}
+
 func StartEventService(network string, address string) {
 	log.Infof("Event Service Started\n")
 
