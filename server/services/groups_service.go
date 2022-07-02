@@ -56,7 +56,11 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	members[proto.UserLevel_ADMIN] = make(map[string]void)
 	members[proto.UserLevel_USER] = make(map[string]void)
 
-	members[proto.UserLevel_ADMIN][username] = empty
+	if request.GetHierarchy() {
+		members[proto.UserLevel_ADMIN][username] = empty
+	} else {
+		members[proto.UserLevel_USER][username] = empty
+	}
 
 	for _, member := range request.GetUsers() {
 		if _, ok := all_users[member]; ok {
@@ -65,12 +69,15 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 		members[proto.UserLevel_USER][member] = empty
 		all_users[member] = empty
 	}
-	for _, member := range request.GetAdmins() {
-		if _, ok := all_users[member]; ok {
-			continue
+
+	if !request.GetHierarchy() {
+		for _, member := range request.GetAdmins() {
+			if _, ok := all_users[member]; ok {
+				continue
+			}
+			members[proto.UserLevel_ADMIN][member] = empty
+			all_users[member] = empty
 		}
-		members[proto.UserLevel_ADMIN][member] = empty
-		all_users[member] = empty
 	}
 
 	err = persistency.Save(members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
@@ -78,12 +85,21 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
 	}
 
+	if request.GetHierarchy() {
+		delete(all_users, username)
+		err = updateGroupHistory(ctx, proto.Action_CREATE, group, []string{username})
+
+		if err != nil {
+			return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err
+		}
+	}
+
 	keys := make([]string, 0, len(all_users))
 	for k := range all_users {
 		keys = append(keys, k)
 	}
 
-	err = updateGroupHistory(ctx, proto.Action_CREATE, group, keys)
+	err = updateGroupHistory(ctx, proto.Action_JOINED, group, keys)
 
 	if err != nil {
 		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, err

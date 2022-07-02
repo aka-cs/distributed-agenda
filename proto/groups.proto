@@ -22,6 +22,7 @@ message CreateGroupRequest{
   Group group = 1;
   repeated string admins = 2;
   repeated string users = 3;
+  bool hierarchy = 4;
 }
 
 message EditGroupRequest{
