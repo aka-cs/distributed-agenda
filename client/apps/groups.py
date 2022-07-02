@@ -18,9 +18,11 @@ async def app():
     # st.radio with get_users_groups as options
     groups, owner = await get_user_groups()
     if groups:
-        option = st.radio(label='', options=groups)
+        option = st.radio(label='', options=groups, format_func=lambda x: groups[x].name)
         group = groups[option]
-        st.title(f'Group: {group.id}')
+        st.write('-' * 100)
+        st.title(f'Group: {group.name}')
+        st.write(group.description)
         users, admins = await get_group_users(group.id)
         users.sort(key=lambda x: x.username)
         st.write('Participants:')
@@ -47,7 +49,11 @@ async def app():
                 await st_add_user(group.id)
                 st.experimental_rerun()
 
+    st.write('-' * 100)
     st.title('New Group')
+
+    name = st.text_input(label='Group name', key='group_name')
+    description = st.text_area(label='Group description', key='group_description')
 
     st.checkbox('Claim yourself as owner', value=True, key='hierarchy')
 
@@ -60,7 +66,7 @@ async def app():
 
     clicked = st.button('Create Group')
     if clicked:
-        result = await st_create_group(users=inputs)
+        result = await st_create_group(users=inputs, name=name, description=description)
         logging.info(f'result: {result}')
         if result:
             st.session_state[INPUTS] = []
@@ -100,8 +106,8 @@ async def get_user_groups():
     return groups, owner
 
 
-async def st_create_group(users):
-    result = await create_group(users=users, hierarchy=st.session_state.get('hierarchy', False))
+async def st_create_group(users, name, description=''):
+    result = await create_group(users=users, name=name, description=description, hierarchy=st.session_state.get('hierarchy', False))
     return result
 
 

@@ -6,5 +6,6 @@ bcrypt~=3.2.2
 PyJWT~=2.4.0
 grpclib~=0.4.2
 aiofiles~=0.6.0
+psutil
 cryptography
 certifi

@@ -2,9 +2,11 @@ import asyncio
 import logging
 import threading
 import time
+from streamlit.scriptrunner.script_run_context import get_script_run_ctx, add_script_run_ctx
 
 from apps import home, login, get_user, groups, history  # import your app modules here
 from multiapp import MultiApp
+from rpc.client import update_servers
 from rpc.history import update_history
 from store import Storage
 
@@ -17,7 +19,10 @@ def every(__seconds: float, func, *args, **kwargs):
     loop = asyncio.get_event_loop_policy().new_event_loop()
     while True:
         try:
-            loop.run_until_complete(func(*args, **kwargs))
+            if asyncio.iscoroutinefunction(func):
+                loop.run_until_complete(func(*args, **kwargs))
+            else:
+                func(*args, **kwargs)
         except BaseException as e:
             logging.error(f'function call failed with exception: {e}')
             raise e
@@ -26,7 +31,13 @@ def every(__seconds: float, func, *args, **kwargs):
 
 # run every in a different thread
 if not Storage.get('repeat'):
-    threading.Thread(target=every, args=(60, update_history)).start()
+    threads = []
+    threads.append(threading.Thread(target=every, args=(60, update_history)))
+    threads.append(threading.Thread(target=every, args=(60, update_servers)))
+    running_ctx = get_script_run_ctx()
+    for thread in threads:
+        add_script_run_ctx(thread, running_ctx)
+        thread.start()
     Storage.store('repeat', True)
 
 # Add all your application here

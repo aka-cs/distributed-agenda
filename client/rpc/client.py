@@ -1,6 +1,10 @@
+import ipaddress
 import logging
+import random
 
 import jwt
+import psutil
+import socket
 from grpclib.client import Channel as BaseChannel
 from grpclib.events import SendRequest, listen, RecvTrailingMetadata
 from grpclib.const import Status
@@ -8,7 +12,7 @@ from store import Storage
 
 
 def get_host():
-    return 'localhost'
+    return random.choice(Storage.get('server', ['localhost']))
 
 
 TOKEN = 'token'
@@ -52,3 +56,49 @@ class Channel(BaseChannel):
 
 async def logout():
     Storage.clear()
+
+
+def get_ipv4_addresses():
+    family = socket.AF_INET
+    for interface, snics in psutil.net_if_addrs().items():
+        for snic in snics:
+            if snic.family == family:
+                if snic.address.startswith('169.254'):
+                    continue
+                ipv4 = ipaddress.ip_address(snic.address)
+                if ipv4.is_loopback:
+                    continue
+                yield snic.address
+
+
+def discover():
+    for ip in get_ipv4_addresses():
+        ip_numbers = ip.split('.')
+        ip_numbers[3] = '255'
+        broadcast = '.'.join(ip_numbers)
+        logging.info(f"Discovering on {broadcast}")
+
+        # udp broadcast on broadcast address
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(b'Hello', (broadcast, 8830))
+
+        response = None
+        while True:
+            try:
+                response = sock.recv(1024)
+            except:
+                break
+        sock.close()
+
+        if response:
+            logging.info(f"Found server at {response.decode()}")
+            yield response.decode()
+
+
+def update_servers():
+    servers = list(discover())
+    logging.info(f"Found servers: {servers}")
+    if servers:
+        logging.info("Updating servers")
+        Storage.store('server', servers)

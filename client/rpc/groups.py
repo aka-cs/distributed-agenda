@@ -33,9 +33,9 @@ async def get_all_groups():
     return groups, owner
 
 
-async def create_group(users, hierarchy=False):
+async def create_group(users, name, description='', hierarchy=False):
 
-    new_group = proto.groups_pb2.Group()
+    new_group = proto.groups_pb2.Group(name=name, description=description)
     request = proto.groups_pb2.CreateGroupRequest(group=new_group, users=users, hierarchy=hierarchy)
 
     async with Channel(services.GROUP) as channel:

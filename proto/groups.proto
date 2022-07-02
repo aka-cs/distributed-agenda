@@ -13,6 +13,7 @@ enum UserLevel{
 message Group{
   int64 id = 1;
   string name = 2;
+  string description = 3;
 }
 
 message GetGroupRequest{
