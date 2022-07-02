@@ -518,7 +518,7 @@ func (node *Node) Partition(ctx context.Context, req *chord.EmptyRequest) (*chor
 
 // Extend the local storage dictionary with a map of <key, values> pairs.
 func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.EmptyResponse, error) {
-	log.Trace("Extending local storage dictionary.\n")
+	log.Debug("Extending local storage dictionary.\n")
 
 	// If there are no keys to add, return.
 	if req.Dictionary == nil || len(req.Dictionary) == 0 {
@@ -538,7 +538,7 @@ func (node *Node) Extend(ctx context.Context, req *chord.ExtendRequest) (*chord.
 
 // Discard a list of keys from local storage dictionary.
 func (node *Node) Discard(ctx context.Context, req *chord.DiscardRequest) (*chord.EmptyResponse, error) {
-	log.Trace("Discarding keys from local storage dictionary.\n")
+	log.Debug("Discarding keys from local storage dictionary.\n")
 
 	node.dictLock.Lock()                     // Lock the dictionary to write on it, and unlock it after.
 	err := node.dictionary.Discard(req.Keys) // Delete the keys from storage.

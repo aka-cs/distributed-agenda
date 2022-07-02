@@ -143,7 +143,7 @@ func (node *Node) CheckPredecessor() {
 func (node *Node) PeriodicallyCheckPredecessor() {
 	log.Debug("Check predecessor thread started.\n")
 
-	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
+	ticker := time.NewTicker(500 * time.Millisecond) // Set the time between routine activations.
 	for {
 		select {
 		case <-node.shutdown: // If node server is shutdown, stop the thread.
@@ -262,6 +262,7 @@ func (node *Node) PeriodicallyCheckSuccessor() {
 // FixFinger update a particular finger on the finger table, and return the index of the next finger to update.
 func (node *Node) FixFinger(index int) int {
 	log.Trace("Fixing finger entry.\n")
+	defer log.Trace("Finger entry fixed.\n")
 
 	m := node.config.HashSize            // Obtain the finger table size.
 	ID := FingerID(node.ID, index, m)    // Obtain node.ID + 2^(next) mod(2^m).
@@ -272,12 +273,15 @@ func (node *Node) FixFinger(index int) int {
 		// Return the next index to fix.
 		return (index + 1) % m
 	}
+
+	log.Trace("Correspondent finger found at " + suc.Address + ".\n")
+
 	// If the successor of this ID is this node, then the ring has already been turned around.
 	// Clean the remaining positions and return index 0 to restart the fixing cycle.
 	if Equals(suc.ID, node.ID) {
-		for i := index; index < m; i++ {
-			node.fingerLock.Lock()        // Lock finger table to write on it, and unlock it after.
-			node.fingerTable[index] = nil // Clean the correspondent position on the finger table.
+		for i := index; i < m; i++ {
+			node.fingerLock.Lock()    // Lock finger table to write on it, and unlock it after.
+			node.fingerTable[i] = nil // Clean the correspondent position on the finger table.
 			node.fingerLock.Unlock()
 		}
 		return 0
@@ -326,6 +330,7 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 
 	node.sucLock.RLock()                     // Lock the queue to read it, and unlock it after.
 	value := entry.value                     // Obtain the successor contained in this queue node.
+	prev := entry.prev                       // Obtain the previous node of this queue node.
 	next := entry.next                       // Obtain the next node of this queue node.
 	inside := entry.inside                   // Check if this queue node still being inside the queue.
 	fulfilled := node.successors.Fulfilled() // Check if the queue is fulfilled.
@@ -341,20 +346,30 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 	suc, err := node.RPC.GetSuccessor(value) // Otherwise, get the successor of this successor.
 	// If there is an error, then assume this successor is dead.
 	if err != nil {
-		message := "Error getting successor of successor at " + value.Address + ".\n" +
-			"Therefore is assumed dead and removed from the queue of successors.\n"
-		log.Error(message + err.Error() + "\n")
+		// If this successor is the immediate successor of this node, don't report the error,
+		// to wait for CheckSuccessor to detect it and pop this node from the queue
+		// (it's necessary for the correct transfer of keys).
+		if prev == nil {
+			// In this case, return the next node of this queue node, to skip this one and fix the remaining.
+			return next
+		} else {
+			// Otherwise, report the error and remove the node from the queue of successors.
+			message := "Error getting successor of successor at " + value.Address + ".\n" +
+				"Therefore is assumed dead and removed from the queue of successors.\n"
+			log.Error(message + err.Error() + "\n")
 
-		node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
-		node.successors.Remove(entry) // Remove it from the queue of successors.
-		// Push back this node, to ensure the queue is not empty.
-		if node.successors.Empty() {
-			node.successors.PushBack(node.Node)
+			node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
+			node.successors.Remove(entry) // Remove it from the queue of successors.
+			// Push back this node, to ensure the queue is not empty.
+			// Push back this node, to ensure the queue is not empty.
+			if node.successors.Empty() {
+				node.successors.PushBack(node.Node)
+			}
+			node.sucLock.Unlock()
+
+			// In this case, return the previous node of this queue node, to fix this entry later.
+			return prev
 		}
-		prev := entry.prev // Obtain the previous node of this queue node.
-		node.sucLock.Unlock()
-		// Return the previous node of this queue node.
-		return prev
 	}
 
 	node.sucLock.RLock()  // Lock the queue to read it, and unlock it after.
@@ -399,7 +414,7 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 func (node *Node) PeriodicallyFixSuccessor() {
 	log.Debug("Fix successor thread started.\n")
 
-	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
+	ticker := time.NewTicker(500 * time.Millisecond) // Set the time between routine activations.
 	var entry *QueueNode[chord.Node] = nil           // Queue node entry for iterations.
 	for {
 		select {
@@ -459,16 +474,21 @@ func (node *Node) FixStorage(key string) {
 			return
 		}
 
-		// Set this <key, value> pair on the corresponding node.
-		err = node.RPC.Set(keyNode, &chord.SetRequest{Key: key, Value: value})
-		if err != nil {
-			return
-		}
-
 		// Lock the storage dictionary to write on it, and unlock it after.
 		node.dictLock.Lock()
 		node.dictionary.Delete(key) // Delete the key from local storage.
 		node.dictLock.Unlock()
+
+		// Set this <key, value> pair on the corresponding node.
+		err = node.RPC.Set(keyNode, &chord.SetRequest{Key: key, Value: value})
+		if err != nil {
+			// In case of error, reinsert the key on this node storage, to prevent the loss of information.
+			// Lock the storage dictionary to write on it, and unlock it after.
+			node.dictLock.Lock()
+			node.dictionary.Set(key, value) // Reinsert the key on local storage.
+			node.dictLock.Unlock()
+			return
+		}
 	}
 }
 
