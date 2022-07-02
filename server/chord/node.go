@@ -61,7 +61,7 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 		server:      nil,
 		shutdown:    nil}
 
-	log.Info("Node created with the address " + node.IP + ".\n")
+	log.Info("Node created with the address.\n")
 
 	// Return the node.
 	return node, nil

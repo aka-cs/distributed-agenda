@@ -328,13 +328,18 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 		return "", err
 	}
 
-	_, err = net.ResolveUDPAddr("udp4", broadcast)
+	out, err := net.ResolveUDPAddr("udp4", broadcast)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = pc.WriteTo([]byte("Hello"), out)
 	if err != nil {
 		return "", err
 	}
 
 	buf := make([]byte, 1024)
-	err = pc.SetReadDeadline(time.Now().Add(5 * time.Second))
+	err = pc.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if err != nil {
 		return "", err
 	}
