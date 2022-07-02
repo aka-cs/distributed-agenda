@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,7 +22,6 @@ type EventsServer struct {
 }
 
 func (*EventsServer) GetEvent(_ context.Context, request *proto.GetEventRequest) (*proto.GetEventResponse, error) {
-	log.Debugf("Get event invoked with %v\n", request)
 
 	id := request.GetId()
 	event, err := persistency.Load[proto.Event](filepath.Join("Event", strconv.FormatInt(id, 10)))
@@ -34,12 +34,11 @@ func (*EventsServer) GetEvent(_ context.Context, request *proto.GetEventRequest)
 }
 
 func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEventRequest) (*proto.CreateEventResponse, error) {
-	log.Debugf("Create event invoked with %v\n", request)
 
 	username, err := getUsernameFromContext(ctx)
 
 	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateEventResponse{}, err
 	}
 
 	event := request.GetEvent()
@@ -58,7 +57,7 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 		usernames, err := getGroupUsernames(&group)
 
 		if err != nil {
-			return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+			return &proto.CreateEventResponse{}, err
 		}
 
 		for _, member := range usernames {
@@ -68,7 +67,7 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 		hierarchy, err := hasHierarchy(&group)
 
 		if err != nil {
-			return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+			return &proto.CreateEventResponse{}, err
 		}
 
 		if !hierarchy {
@@ -87,18 +86,18 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 	invalids, err := checkValid(event, keys)
 
 	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED, Unavailable: invalids}, err
+		return &proto.CreateEventResponse{Unavailable: invalids}, err
 	}
 
 	err = persistency.Save(event, filepath.Join("Event", strconv.FormatInt(event.Id, 10)))
 
 	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateEventResponse{}, err
 	}
 
 	err = persistency.Save(users, filepath.Join("EventParticipants", strconv.FormatInt(event.Id, 10)))
 	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateEventResponse{}, err
 	}
 
 	updateEventHistory(ctx, proto.Action_CREATE, event, keys)
@@ -108,14 +107,13 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 	err = persistency.Save(confirmations, filepath.Join("EventConfirmations", strconv.FormatInt(event.Id, 10)))
 
 	if err != nil {
-		return &proto.CreateEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.CreateEventResponse{}, err
 	}
 
-	return &proto.CreateEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.CreateEventResponse{}, nil
 }
 
 func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEventRequest) (*proto.DeleteEventResponse, error) {
-	log.Debugf("Delete Event invoked with %v\n", request)
 
 	id := request.GetId()
 
@@ -124,13 +122,13 @@ func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEvent
 	event, err := persistency.Load[proto.Event](path)
 
 	if err != nil {
-		return &proto.DeleteEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteEventResponse{}, err
 	}
 
 	err = persistency.Delete(path)
 
 	if err != nil {
-		return &proto.DeleteEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteEventResponse{}, err
 	}
 
 	ppath := filepath.Join("EventParticipants", strconv.FormatInt(event.Id, 10))
@@ -138,31 +136,30 @@ func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEvent
 	members, err := persistency.Load[[]string](ppath)
 
 	if err != nil {
-		return &proto.DeleteEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteEventResponse{}, err
 	}
 
 	err = persistency.Delete(ppath)
 
 	if err != nil {
-		return &proto.DeleteEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteEventResponse{}, err
 	}
 
 	err = updateEventHistory(ctx, proto.Action_DELETE, &event, members)
 
 	if err != nil {
-		return &proto.DeleteEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.DeleteEventResponse{}, err
 	}
 
-	return &proto.DeleteEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.DeleteEventResponse{}, nil
 }
 
 func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.ConfirmEventResponse, error) {
-	log.Debugf("Confirm event invoked with %v\n", request)
 
 	username, err := getUsernameFromContext(ctx)
 
 	if err != nil {
-		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.ConfirmEventResponse{}, err
 	}
 
 	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
@@ -170,11 +167,11 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 	confirmations, err := persistency.Load[map[string]bool](path)
 
 	if err != nil {
-		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.ConfirmEventResponse{}, err
 	}
 
 	if _, ok := confirmations[username]; !ok {
-		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "")
+		return &proto.ConfirmEventResponse{}, status.Error(codes.PermissionDenied, "")
 	}
 
 	confirmations[username] = true
@@ -182,7 +179,7 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 	err = persistency.Save(confirmations, path)
 
 	if err != nil {
-		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.ConfirmEventResponse{}, err
 	}
 
 	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
@@ -195,13 +192,13 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 
 	for key := range confirmations {
 		if !confirmations[key] {
-			return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+			return &proto.ConfirmEventResponse{}, nil
 		}
 		users = append(users, key)
 	}
 
 	if err != nil {
-		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.ConfirmEventResponse{}, err
 	}
 
 	event.Draft = true
@@ -209,21 +206,20 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 	err = persistency.Save(&event, path)
 
 	if err != nil {
-		return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.ConfirmEventResponse{}, err
 	}
 
 	updateEventHistory(ctx, proto.Action_UPDATE, &event, users)
 
-	return &proto.ConfirmEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.ConfirmEventResponse{}, nil
 }
 
 func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.RejectEventResponse, error) {
-	log.Debugf("Reject event invoked with %v\n", request)
 
 	username, err := getUsernameFromContext(ctx)
 
 	if err != nil {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RejectEventResponse{}, err
 	}
 
 	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
@@ -231,17 +227,17 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 	confirmations, err := persistency.Load[map[string]bool](path)
 
 	if err != nil {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RejectEventResponse{}, err
 	}
 
 	if _, ok := confirmations[username]; !ok {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "")
+		return &proto.RejectEventResponse{}, status.Error(codes.PermissionDenied, "")
 	}
 
 	err = persistency.Delete(path)
 
 	if err != nil {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RejectEventResponse{}, err
 	}
 
 	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
@@ -249,7 +245,7 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 	event, err := persistency.Load[proto.Event](path)
 
 	if err != nil {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RejectEventResponse{}, err
 	}
 
 	updateEventHistory(ctx, proto.Action_REJECT, &event, []string{username})
@@ -265,7 +261,7 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 	err = persistency.Delete(path)
 
 	if err != nil {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RejectEventResponse{}, err
 	}
 
 	path = filepath.Join("EventParticipants", strconv.FormatInt(request.GetEventId(), 10))
@@ -273,10 +269,10 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 	err = persistency.Delete(path)
 
 	if err != nil {
-		return &proto.RejectEventResponse{Result: proto.OperationOutcome_FAILED}, err
+		return &proto.RejectEventResponse{}, err
 	}
 
-	return &proto.RejectEventResponse{Result: proto.OperationOutcome_SUCCESS}, nil
+	return &proto.RejectEventResponse{}, nil
 }
 
 func StartEventService(network string, address string) {
@@ -288,7 +284,19 @@ func StartEventService(network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryServerInterceptor), grpc.StreamInterceptor(StreamServerInterceptor))
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				UnaryLoggingInterceptor,
+				UnaryServerInterceptor,
+			),
+		), grpc.StreamInterceptor(
+			grpc_middleware.ChainStreamServer(
+				StreamLoggingInterceptor,
+				StreamServerInterceptor,
+			),
+		),
+	)
 
 	proto.RegisterEventsServiceServer(s, &EventsServer{})
 

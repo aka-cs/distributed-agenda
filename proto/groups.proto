@@ -55,15 +55,12 @@ message GetGroupResponse{
 }
 
 message CreateGroupResponse{
-  OperationOutcome result = 1;
 }
 
 message EditGroupResponse{
-  OperationOutcome result = 1;
 }
 
 message DeleteGroupResponse{
-  OperationOutcome result = 1;
 }
 
 message GetGroupUsersResponse{
@@ -72,11 +69,9 @@ message GetGroupUsersResponse{
 }
 
 message AddUserResponse{
-  OperationOutcome result = 1;
 }
 
 message RemoveUserResponse{
-  OperationOutcome result = 1;
 }
 
 service GroupService{

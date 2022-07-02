@@ -30,7 +30,6 @@ message AddHistoryEntryRequest{
 }
 
 message AddHistoryEntryResponse{
-  OperationOutcome result = 1;
 }
 
 message GetFullHistoryRequest{

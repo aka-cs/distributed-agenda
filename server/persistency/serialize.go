@@ -46,6 +46,8 @@ func Save[T any](object T, path string) error {
 
 func Load[T any](path string) (T, error) {
 
+	base := filepath.Base(path)
+
 	fullPath := filepath.Join("resources", path+".bin")
 
 	log.Debugf("Loading file: %s\n", fullPath)
@@ -57,7 +59,7 @@ func Load[T any](path string) (T, error) {
 
 	if err != nil {
 		log.Errorf("Error opening file:\n%v\n", err)
-		return empty, status.Error(codes.NotFound, "File not found")
+		return empty, status.Errorf(codes.NotFound, "{} not found", base)
 	}
 
 	defer closeFile(dataFile)
@@ -67,7 +69,7 @@ func Load[T any](path string) (T, error) {
 
 	if err != nil {
 		log.Errorf("Error deserializing object:\n%v\n", err)
-		return empty, status.Error(codes.Internal, "Couldn't deserialize file")
+		return empty, status.Errorf(codes.Internal, "Error returning {}", base)
 	}
 
 	return result, nil

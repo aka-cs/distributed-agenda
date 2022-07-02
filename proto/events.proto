@@ -1,6 +1,5 @@
 syntax="proto3";
 
-import "proto/users.proto";
 import "google/protobuf/timestamp.proto";
 
 package distributed_agenda;
@@ -33,12 +32,10 @@ message GetEventResponse{
 }
 
 message CreateEventResponse{
-    OperationOutcome result = 1;
-    repeated string unavailable = 2;
+    repeated string unavailable = 1;
 }
 
 message DeleteEventResponse{
-    OperationOutcome result = 1;
 }
 
 message ConfirmEventRequest{
@@ -46,7 +43,6 @@ message ConfirmEventRequest{
 }
 
 message ConfirmEventResponse{
-    OperationOutcome result = 1;
 }
 
 message RejectEventRequest{
@@ -54,7 +50,6 @@ message RejectEventRequest{
 }
 
 message RejectEventResponse{
-    OperationOutcome result = 1;
 }
 
 service EventsService{

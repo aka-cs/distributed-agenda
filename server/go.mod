@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/t-tomalak/logrus-easy-formatter v0.0.0-20190827215021-c074f06c5816
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
