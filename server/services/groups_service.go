@@ -28,15 +28,13 @@ type GroupsServer struct {
 func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroupRequest) (*proto.CreateGroupResponse, error) {
 	log.Debugf("Create group invoked with %v\n", request)
 
-	jwtToken, err := ValidateRequest(ctx)
+	username, err := getUsernameFromContext(ctx)
 
 	if err != nil {
 		return &proto.CreateGroupResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.Internal, "")
 	}
 
 	all_users := make(map[string]void)
-
-	username := jwtToken.Claims.(jwt.MapClaims)["sub"].(string)
 
 	all_users[username] = empty
 
@@ -178,9 +176,25 @@ func (*GroupsServer) DeleteGroup(ctx context.Context, request *proto.DeleteGroup
 func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest) (*proto.AddUserResponse, error) {
 	log.Debugf("Add User invoked with %v\n", request)
 
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
 	userID := request.GetUserID()
 	groupID := request.GetGroupID()
 	level := request.GetLevel()
+
+	isOwner, err := checkIsOwner(username, groupID)
+
+	if err != nil {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	if !isOwner {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "Only creator can add users")
+	}
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
@@ -188,6 +202,10 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 
 	if err != nil {
 		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	if _, ok := groupMembers[level][userID]; ok {
+		return &proto.AddUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.AlreadyExists, "User is already in group")
 	}
 
 	groupMembers[level][userID] = empty
@@ -250,9 +268,25 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRequest) (*proto.RemoveUserResponse, error) {
 	log.Debugf("Remove User invoked with %v\n", request)
 
+	username, err := getUsernameFromContext(ctx)
+
+	if err != nil {
+		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
 	userID := request.GetUserID()
 	groupID := request.GetGroupID()
 	level := request.GetLevel()
+
+	isOwner, err := checkIsOwner(username, groupID)
+
+	if err != nil {
+		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, err
+	}
+
+	if !isOwner {
+		return &proto.RemoveUserResponse{Result: proto.OperationOutcome_FAILED}, status.Error(codes.PermissionDenied, "Only creator can remove users")
+	}
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
@@ -334,4 +368,37 @@ func getGroupUsernames(group *proto.Group) ([]string, error) {
 	}
 
 	return usernames, nil
+}
+
+func checkIsOwner(username string, groupId int64) (bool, error) {
+
+	path := filepath.Join("History", username)
+
+	history, err := persistency.Load[[]proto.HistoryEntry](path)
+	if err != nil {
+		return false, err
+	}
+
+	count := 0
+
+	for i := 0; i < len(history); i++ {
+		if history[i].Group != nil && history[i].Group.Id == groupId {
+			if history[i].Action == proto.Action_CREATE {
+				count++
+			} else if history[i].Action == proto.Action_DELETE {
+				count--
+			}
+		}
+	}
+	return count != 0, nil
+}
+
+func getUsernameFromContext(ctx context.Context) (string, error) {
+	jwtToken, err := ValidateRequest(ctx)
+
+	if err != nil {
+		return "", err
+	}
+
+	return jwtToken.Claims.(jwt.MapClaims)["sub"].(string), nil
 }
