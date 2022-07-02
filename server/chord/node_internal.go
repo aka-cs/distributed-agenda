@@ -333,10 +333,14 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 		return "", err
 	}
 
+	log.Info("UPD address resolved.\n")
+
 	_, err = pc.WriteTo([]byte("Hello"), out)
 	if err != nil {
 		return "", err
 	}
+
+	log.Info("Message broadcast done.\n")
 
 	buf := make([]byte, 1024)
 	err = pc.SetReadDeadline(time.Now().Add(10 * time.Second))
@@ -344,8 +348,11 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 		return "", err
 	}
 
+	log.Info("Waiting for response.\n")
+
 	n, address, err := pc.ReadFrom(buf)
 	if err != nil {
+		log.Info("Deadline for response exceed.\n")
 		return "", nil
 	}
 
