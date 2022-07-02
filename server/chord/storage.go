@@ -12,6 +12,7 @@ type Storage interface {
 	Partition([]byte, []byte) (map[string][]byte, map[string][]byte, error)
 	Extend(map[string][]byte) error
 	Discard(data []string) error
+	Clear()
 }
 
 type Dictionary struct {
@@ -76,4 +77,8 @@ func (dictionary *Dictionary) Discard(data []string) error {
 	}
 
 	return nil
+}
+
+func (dictionary *Dictionary) Clear() {
+	dictionary.data = make(map[string][]byte)
 }

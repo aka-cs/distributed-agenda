@@ -36,7 +36,7 @@ type Node struct {
 }
 
 // NewNode creates and returns a new Node.
-func NewNode(address string, configuration *Configuration) (*Node, error) {
+func NewNode(address string, configuration *Configuration, transport RemoteServices, storage Storage) (*Node, error) {
 	log.Info("Creating a new node.\n")
 
 	// If configuration is null, report error.
@@ -56,8 +56,6 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 	// Creates the new node with the obtained ID and same address.
 	innerNode := &chord.Node{ID: id, Address: address}
 
-	transport := NewGRPCServices(configuration) // Creates the transport layer.
-
 	// Instantiates the node.
 	node := &Node{Node: innerNode,
 		predecessor: nil,
@@ -65,7 +63,7 @@ func NewNode(address string, configuration *Configuration) (*Node, error) {
 		fingerTable: nil,
 		RPC:         transport,
 		config:      configuration,
-		dictionary:  nil,
+		dictionary:  storage,
 		server:      nil,
 		shutdown:    nil}
 

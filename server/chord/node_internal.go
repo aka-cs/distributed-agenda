@@ -38,7 +38,7 @@ func (node *Node) Start() error {
 	node.successors.PushBack(node.Node)                                  // Set this node as its own successor.
 	node.predecessor = node.Node                                         // Set this node as it own predecessor.
 	node.fingerTable = NewFingerTable(node.config.HashSize)              // Create the finger table.
-	node.dictionary = NewDictionary(node.config.Hash)                    // Create the node dictionary.
+	node.dictionary.Clear()                                              // Clear the node dictionary.
 	node.server = grpc.NewServer(node.config.ServerOpts...)              // Create the node server.
 	node.sock = listener.(*net.TCPListener)                              // Save the socket.
 
