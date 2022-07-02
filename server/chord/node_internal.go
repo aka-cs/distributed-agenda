@@ -66,6 +66,14 @@ func (node *Node) Start() error {
 	go node.PeriodicallyFixStorage()
 
 	ip, err := node.NetDiscover()
+	if err != nil {
+		message := "Error starting server: cannot discover net to connect.\n"
+		log.Error(message)
+		return errors.New(message + err.Error())
+	}
+	if ip != "" {
+
+	}
 
 	log.Info("Server started.\n")
 	return nil

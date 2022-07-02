@@ -220,7 +220,7 @@ func (services *GRPCServices) GetPredecessor(node *chord.Node) (*chord.Node, err
 		return nil, errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (services *GRPCServices) GetSuccessor(node *chord.Node) (*chord.Node, error
 		return nil, errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (services *GRPCServices) SetPredecessor(node, pred *chord.Node) error {
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func (services *GRPCServices) SetSuccessor(node, suc *chord.Node) error {
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func (services *GRPCServices) FindSuccessor(node *chord.Node, id []byte) (*chord
 		return nil, errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func (services *GRPCServices) Notify(node, pred *chord.Node) error {
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (services *GRPCServices) Check(node *chord.Node) error {
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func (services *GRPCServices) Get(node *chord.Node, req *chord.GetRequest) (*cho
 		return nil, errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func (services *GRPCServices) Set(node *chord.Node, req *chord.SetRequest) error
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -398,7 +398,7 @@ func (services *GRPCServices) Delete(node *chord.Node, req *chord.DeleteRequest)
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -418,7 +418,7 @@ func (services *GRPCServices) Extend(node *chord.Node, req *chord.ExtendRequest)
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}
@@ -438,7 +438,7 @@ func (services *GRPCServices) Partition(node *chord.Node, req *chord.EmptyReques
 		return nil, errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +457,7 @@ func (services *GRPCServices) Discard(node *chord.Node, req *chord.DiscardReques
 		return errors.New("Cannot establish connection with a null node.\n")
 	}
 
-	remoteNode, err := services.Connect(node.Address) // Establish connection with the remote node.
+	remoteNode, err := services.Connect(node.IP + ":" + node.Port) // Establish connection with the remote node.
 	if err != nil {
 		return err
 	}

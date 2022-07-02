@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"math/big"
 	"net"
 	"server/chord/chord"
 	"sync"
@@ -36,7 +37,7 @@ type Node struct {
 }
 
 // NewNode creates and returns a new Node.
-func NewNode(address string, configuration *Configuration, transport RemoteServices, storage Storage) (*Node, error) {
+func NewNode(port string, configuration *Configuration, transport RemoteServices, storage Storage) (*Node, error) {
 	log.Info("Creating a new node.\n")
 
 	// If configuration is null, report error.
@@ -46,15 +47,8 @@ func NewNode(address string, configuration *Configuration, transport RemoteServi
 		return nil, errors.New(message)
 	}
 
-	id, err := HashKey(address, configuration.Hash) // Obtain the ID relative to this address.
-	if err != nil {
-		message := "Error creating node: cannot hash node address.\n"
-		log.Error(message)
-		return nil, errors.New(message + err.Error())
-	}
-
 	// Creates the new node with the obtained ID and same address.
-	innerNode := &chord.Node{ID: id, Address: address}
+	innerNode := &chord.Node{ID: big.NewInt(0).Bytes(), IP: "0.0.0.0:", Port: port}
 
 	// Instantiates the node.
 	node := &Node{Node: innerNode,
@@ -67,7 +61,7 @@ func NewNode(address string, configuration *Configuration, transport RemoteServi
 		server:      nil,
 		shutdown:    nil}
 
-	log.Info("Node created with the address " + node.Address + ".\n")
+	log.Info("Node created with the address " + node.IP + ".\n")
 
 	// Return the node.
 	return node, nil
@@ -103,7 +97,7 @@ func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*c
 
 // SetPredecessor sets the predecessor of this node.
 func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
-	log.Trace("Setting node predecessor to " + candidate.Address + ".\n")
+	log.Trace("Setting node predecessor to " + candidate.IP + ".\n")
 
 	// If the new predecessor is not this node, update this node successor.
 	if !Equals(candidate.ID, node.ID) {
@@ -143,7 +137,7 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 			// Transfer the old predecessor keys to this node successor.
 			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
 			if err != nil {
-				message := "Error transferring keys to successor at " + suc.Address + ".\n"
+				message := "Error transferring keys to successor at " + suc.IP + ".\n"
 				log.Error(message)
 				return emptyResponse, errors.New(message + err.Error())
 			}
@@ -158,7 +152,7 @@ func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*c
 
 // SetSuccessor sets the successor of this node.
 func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
-	log.Trace("Setting node successor to " + candidate.Address + ".\n")
+	log.Trace("Setting node successor to " + candidate.IP + ".\n")
 
 	// If the new successor is not this node, update this node successor.
 	if !Equals(candidate.ID, node.ID) {
@@ -192,7 +186,7 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 		// Transfer this node keys to the new successor, to update it.
 		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: in})
 		if err != nil {
-			message := "Error transferring keys to the new successor at " + candidate.Address + ".\n"
+			message := "Error transferring keys to the new successor at " + candidate.IP + ".\n"
 			log.Error(message)
 			return emptyResponse, errors.New(message + err.Error())
 		}
@@ -222,7 +216,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 	// If this node has no predecessor or the predecessor candidate is closer to this node
 	// than its current predecessor, update this node predecessor with the candidate.
 	if Equals(pred.ID, node.ID) || Between(new.ID, pred.ID, node.ID) {
-		log.Debug("Predecessor updated to node at " + new.Address + ".\n")
+		log.Debug("Predecessor updated to node at " + new.IP + ".\n")
 
 		// Lock the predecessor to write on it, and unlock it after.
 		node.predLock.Lock()
@@ -266,7 +260,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		if !Equals(suc.ID, node.ID) {
 			err = node.RPC.Discard(suc, &chord.DiscardRequest{Keys: Keys(out)})
 			if err != nil {
-				message := "Error deleting replicated keys on the successor at " + new.Address + ".\n"
+				message := "Error deleting replicated keys on the successor at " + new.IP + ".\n"
 				log.Error(message)
 				return emptyResponse, errors.New(message + err.Error())
 			}
@@ -353,7 +347,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 		// Return the value associated to this key.
 		return &chord.GetResponse{Value: value}, nil
 	} else {
-		log.Info("Redirecting get request to " + keyNode.Address + ".\n")
+		log.Info("Redirecting get request to " + keyNode.IP + ".\n")
 	}
 	// Otherwise, return the result of the remote call on the correspondent node.
 	return node.RPC.Get(keyNode, req)
@@ -413,13 +407,13 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 		// If successor is not this node, replicate the request to it.
 		if !Equals(suc.ID, node.ID) {
 			req.Replica = true
-			log.Debug("Replicating set request to " + suc.Address + ".\n")
+			log.Debug("Replicating set request to " + suc.IP + ".\n")
 			return emptyResponse, node.RPC.Set(suc, req)
 		}
 		// Else, return.
 		return emptyResponse, nil
 	} else {
-		log.Info("Redirecting set request to " + keyNode.Address + ".\n")
+		log.Info("Redirecting set request to " + keyNode.IP + ".\n")
 	}
 
 	// Otherwise, return the result of the remote call on the correspondent node.
@@ -480,13 +474,13 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 		// If successor is not this node, replicate the request to it.
 		if Equals(suc.ID, node.ID) {
 			req.Replica = true
-			log.Debug("Replicating delete request to " + suc.Address + ".\n")
+			log.Debug("Replicating delete request to " + suc.IP + ".\n")
 			return emptyResponse, node.RPC.Delete(suc, req)
 		}
 		// Else, return.
 		return emptyResponse, nil
 	} else {
-		log.Info("Redirecting delete request to " + keyNode.Address + ".\n")
+		log.Info("Redirecting delete request to " + keyNode.IP + ".\n")
 	}
 
 	// Otherwise, return the result of the remote call on the correspondent node.

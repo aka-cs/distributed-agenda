@@ -32,7 +32,7 @@ func (node *Node) Stabilize() {
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
 	if err != nil {
-		message := "Error stabilizing node.\nCannot get predecessor of successor at " + suc.Address + ".\n"
+		message := "Error stabilizing node.\nCannot get predecessor of successor at " + suc.IP + ".\n"
 		log.Error(message + err.Error() + "\n")
 		return
 	}
@@ -40,7 +40,7 @@ func (node *Node) Stabilize() {
 	// If candidate is closer to this node than its current successor, update this node successor
 	// with the candidate.
 	if Equals(node.ID, suc.ID) || Between(candidate.ID, node.ID, suc.ID) {
-		log.Debug("Successor updated to node at " + candidate.Address + ".\n")
+		log.Debug("Successor updated to node at " + candidate.IP + ".\n")
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
 		node.successors.PushBeg(candidate) // Update this node successor with the obtained node.
@@ -50,7 +50,7 @@ func (node *Node) Stabilize() {
 
 	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
 	if err != nil {
-		message := "Error stabilizing node.\nError notifying successor at " + suc.Address + ".\n"
+		message := "Error stabilizing node.\nError notifying successor at " + suc.IP + ".\n"
 		log.Error(message + err.Error() + "\n")
 		return
 	}
@@ -92,7 +92,7 @@ func (node *Node) CheckPredecessor() {
 		err := node.RPC.Check(pred)
 		// In case of error, assume predecessor is not alive, and set this node predecessor to this node.
 		if err != nil {
-			log.Error("Predecessor at " + pred.Address + " failed.\n" + err.Error() + "\n")
+			log.Error("Predecessor at " + pred.IP + " failed.\n" + err.Error() + "\n")
 			log.Debug("Absorbing predecessor's keys.\n")
 
 			// Lock the predecessor to write on it, and unlock it after.
@@ -191,7 +191,7 @@ func (node *Node) CheckSuccessor() {
 			}
 			suc = node.successors.Beg() // Take the next successor in queue.
 			node.sucLock.Unlock()
-			log.Error("Successor at " + suc.Address + " failed.\n" + err.Error() + "\n")
+			log.Error("Successor at " + suc.IP + " failed.\n" + err.Error() + "\n")
 		} else {
 			// If successor is alive, return.
 			log.Trace("Successor alive.\n")
@@ -215,7 +215,7 @@ func (node *Node) CheckSuccessor() {
 	}
 
 	// Otherwise, report that there is a new successor.
-	log.Debug("Successor updated to node at " + suc.Address + ".\n")
+	log.Debug("Successor updated to node at " + suc.IP + ".\n")
 
 	// Transfer this node keys to the new successor.
 	// Lock the dictionary to read it, and unlock it after.
@@ -274,7 +274,7 @@ func (node *Node) FixFinger(index int) int {
 		return (index + 1) % m
 	}
 
-	log.Trace("Correspondent finger found at " + suc.Address + ".\n")
+	log.Trace("Correspondent finger found at " + suc.IP + ".\n")
 
 	// If the successor of this ID is this node, then the ring has already been turned around.
 	// Clean the remaining positions and return index 0 to restart the fixing cycle.
@@ -354,7 +354,7 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 			return next
 		} else {
 			// Otherwise, report the error and remove the node from the queue of successors.
-			message := "Error getting successor of successor at " + value.Address + ".\n" +
+			message := "Error getting successor of successor at " + value.IP + ".\n" +
 				"Therefore is assumed dead and removed from the queue of successors.\n"
 			log.Error(message + err.Error() + "\n")
 
