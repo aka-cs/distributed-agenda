@@ -4,20 +4,35 @@ import (
 	"context"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 
-	_, err := ValidateRequest(ctx)
+	token, err := ValidateRequest(ctx)
 
 	if err != nil {
 		return nil, err
 	}
 
-	h, err := handler(ctx, req)
+	md, ok := metadata.FromIncomingContext(ctx)
+
+	if !ok {
+		log.Error("Error extracting metadata from context\n")
+		return nil, status.Error(codes.Internal, "")
+	}
+
+	md.Append("username", token.Claims.(jwt.MapClaims)["sub"].(string))
+
+	newCtx := metadata.NewIncomingContext(ctx, md)
+
+	h, err := handler(newCtx, req)
 
 	return h, err
 }

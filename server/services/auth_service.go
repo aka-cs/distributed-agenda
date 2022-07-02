@@ -35,7 +35,7 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(request.Password))
 	if err != nil {
-		log.Infof("Permission denied:\n%v\n", err)
+		log.Infof("Permission denied: %v\n", err)
 		return nil, status.Errorf(codes.PermissionDenied, "Wrong username or password")
 	}
 
