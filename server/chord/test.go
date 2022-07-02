@@ -162,7 +162,7 @@ func Test() {
 		log.Fatal("Error creating node")
 	}
 
-	if node.Start() != nil {
+	if err = node.Start(); err != nil {
 		log.Fatal(err.Error() + "Error starting server.\n")
 		return
 	}
