@@ -95,50 +95,15 @@ func (node *Node) GetSuccessor(ctx context.Context, req *chord.EmptyRequest) (*c
 func (node *Node) SetPredecessor(ctx context.Context, candidate *chord.Node) (*chord.EmptyResponse, error) {
 	log.Trace("Setting node predecessor to " + candidate.IP + ".\n")
 
-	// If the new predecessor is not this node, update this node successor.
+	// If the new predecessor is not this node, update this node predecessor.
 	if !Equals(candidate.ID, node.ID) {
 		// Lock the predecessor to read and write on it, and unlock it after.
 		node.predLock.Lock()
 		pred := node.predecessor
 		node.predecessor = candidate
 		node.predLock.Unlock()
-
-		// Lock the successor to read it, and unlock it after.
-		node.sucLock.RLock()
-		suc := node.successors.Beg()
-		node.sucLock.RUnlock()
-
-		// If there was an old successor, and successor exists, transfer the old predecessor keys to
-		// this node successor, to maintain replication.
-		if !Equals(pred.ID, node.ID) && !Equals(suc.ID, node.ID) {
-			log.Trace("Absorbing old predecessor's keys.\n")
-			// Lock the dictionary to read it, and unlock it after.
-			node.dictLock.RLock()
-			in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the old predecessor keys.
-			node.dictLock.RUnlock()
-			if err != nil {
-				message := "Error obtaining old predecessor keys.\n"
-				log.Error(message)
-				return emptyResponse, errors.New(message + err.Error())
-			}
-
-			/////
-			log.Debug("Transferring old predecessor keys to the successor.\n")
-			log.Debug("Out:\n")
-			log.Debug(out)
-			log.Debug("In:\n")
-			log.Debug(in)
-			log.Debug("\n")
-
-			// Transfer the old predecessor keys to this node successor.
-			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
-			if err != nil {
-				message := "Error transferring keys to successor at " + suc.IP + ".\n"
-				log.Error(message)
-				return emptyResponse, errors.New(message + err.Error())
-			}
-			log.Trace("Predecessor's keys absorbed. Successful transfer of keys to the successor.\n")
-		}
+		// If there was an old predecessor, absorb its keys.
+		go node.AbsorbPredecessorKeys(pred)
 	} else {
 		log.Trace("Candidate predecessor is this same node. Update refused.\n")
 	}
@@ -152,41 +117,12 @@ func (node *Node) SetSuccessor(ctx context.Context, candidate *chord.Node) (*cho
 
 	// If the new successor is not this node, update this node successor.
 	if !Equals(candidate.ID, node.ID) {
-		// Lock the predecessor to read it, and unlock it after.
-		node.predLock.RLock()
-		pred := node.predecessor
-		node.predLock.RUnlock()
-
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
 		node.successors.PushBeg(candidate)
 		node.sucLock.Unlock()
-
-		// Lock the dictionary to read it, and unlock it after.
-		node.dictLock.RLock()
-		in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
-		node.dictLock.RUnlock()
-		if err != nil {
-			message := "Error obtaining this node keys.\n"
-			log.Error(message)
-			return emptyResponse, errors.New(message + err.Error())
-		}
-
-		log.Debug("Transferring this node keys to the new successor.\n")
-		log.Debug("In:\n")
-		log.Debug(in)
-		log.Debug("Out:\n")
-		log.Debug(out)
-		log.Debug("\n")
-
-		// Transfer this node keys to the new successor, to update it.
-		err = node.RPC.Extend(candidate, &chord.ExtendRequest{Dictionary: in})
-		if err != nil {
-			message := "Error transferring keys to the new successor at " + candidate.IP + ".\n"
-			log.Error(message)
-			return emptyResponse, errors.New(message + err.Error())
-		}
-		log.Trace("Successful transfer of keys to the new successor.\n")
+		// Update this new predecessor with this node keys.
+		go node.UpdateSuccessorKeys()
 	} else {
 		log.Trace("Candidate successor is this same node. Update refused.\n")
 	}
@@ -219,79 +155,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		node.predecessor = new
 		node.predLock.Unlock()
 
-		// Transfer the corresponding keys to the new predecessor.
-		// Lock the dictionary to read it, and unlock it after.
-		node.dictLock.RLock()
-		in, out, err := node.dictionary.Partition(new.ID, node.ID) // Obtain the keys to transfer.
-		node.dictLock.RUnlock()
-		if err != nil {
-			message := "Error obtaining the new predecessor corresponding keys.\n"
-			log.Error(message)
-			return emptyResponse, errors.New(message + err.Error())
-		}
-
-		log.Debug("Transferring keys to the new predecessor.\n")
-		log.Debug("Out:\n")
-		log.Debug(out)
-		log.Debug("In:\n")
-		log.Debug(in)
-		log.Debug("\n")
-
-		// Build the new predecessor dictionary, by transferring its correspondent keys.
-		err = node.RPC.Extend(new, &chord.ExtendRequest{Dictionary: out})
-		if err != nil {
-			message := "Error transferring keys to the new predecessor.\n"
-			log.Error(message)
-			return emptyResponse, errors.New(message + err.Error())
-		}
-
-		log.Debug("Successful transfer of keys to the new predecessor.\n")
-
-		// Lock the successor to read it, and unlock it after.
-		node.sucLock.RLock()
-		suc := node.successors.Beg()
-		node.sucLock.RUnlock()
-
-		// If successor exists, delete the transferred keys from successor storage replication.
-		if !Equals(suc.ID, node.ID) && !Equals(suc.ID, pred.ID) {
-			err = node.RPC.Discard(suc, &chord.DiscardRequest{Keys: Keys(out)})
-			if err != nil {
-				message := "Error deleting replicated keys on the successor at " + new.IP + ".\n"
-				log.Error(message)
-				return emptyResponse, errors.New(message + err.Error())
-			}
-
-			log.Debug("Successful delete of old predecessor replicated keys in the successor.\n")
-			log.Debug(Keys(out))
-			log.Debug("\n")
-		}
-
-		// If the old predecessor is not this node, delete the old predecessor keys from this node.
-		if !Equals(pred.ID, node.ID) {
-			// Lock the dictionary to read it, and unlock it after.
-			node.dictLock.RLock()
-			_, out, err = node.dictionary.Partition(pred.ID, node.ID) // Obtain the keys to delete.
-			node.dictLock.RUnlock()
-			if err != nil {
-				message := "Error obtaining old predecessor keys replicated on this node.\n"
-				log.Error(message)
-				return emptyResponse, errors.New(message + err.Error())
-			}
-
-			// Lock the dictionary to write on it, and unlock it after.
-			node.dictLock.Lock()
-			err = node.dictionary.Discard(Keys(out)) // Delete the keys of the old predecessor.
-			node.dictLock.Unlock()
-			if err != nil {
-				message := "Error deleting old predecessor keys on this node.\n"
-				log.Error(message)
-				return emptyResponse, errors.New(message + err.Error())
-			}
-
-			log.Debug(Keys(out))
-			log.Debug("\n")
-			log.Debug("Successful delete of old predecessor replicated keys in this node.\n")
-		}
+		go node.UpdatePredecessorKeys(pred)
 	}
 
 	return emptyResponse, nil

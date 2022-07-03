@@ -8,6 +8,5 @@ import (
 func main() {
 
 	logging.SettingLogger("chord")
-
 	chord.Test()
 }

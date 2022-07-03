@@ -93,44 +93,12 @@ func (node *Node) CheckPredecessor() {
 		// In case of error, assume predecessor is not alive, and set this node predecessor to this node.
 		if err != nil {
 			log.Error("Predecessor at " + pred.IP + " failed.\n" + err.Error() + "\n")
-			log.Debug("Absorbing predecessor's keys.\n")
-
 			// Lock the predecessor to write on it, and unlock it after.
 			node.predLock.Lock()
 			node.predecessor = node.Node
 			node.predLock.Unlock()
-
-			// Lock the successor to read it, and unlock it after.
-			node.sucLock.RLock()
-			suc := node.successors.Beg()
-			node.sucLock.RUnlock()
-
-			// If successor exists, transfer the old predecessor keys to it, to maintain replication.
-			if !Equals(suc.ID, node.ID) {
-				// Lock the dictionary to read it, and unlock it after.
-				node.dictLock.RLock()
-				in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the predecessor keys.
-				node.dictLock.RUnlock()
-				if err != nil {
-					log.Error("Error obtaining predecessor keys.\n")
-					return
-				}
-
-				log.Debug("Transferring old predecessor keys to the successor.\n")
-				log.Debug("Out:\n")
-				log.Debug(out)
-				log.Debug("In:\n")
-				log.Debug(in)
-				log.Debug("\n")
-
-				// Transfer the keys to this node successor.
-				err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
-				if err != nil {
-					log.Error(err.Error() + "Error transferring keys to successor.\n")
-					return
-				}
-				log.Debug("Predecessor keys absorbed. Successful transfer of keys to the successor.\n")
-			}
+			// If there was an old predecessor, absorb its keys.
+			go node.AbsorbPredecessorKeys(pred)
 		} else {
 			log.Trace("Predecessor alive.\n")
 		}
@@ -217,30 +185,7 @@ func (node *Node) CheckSuccessor() {
 	// Otherwise, report that there is a new successor.
 	log.Debug("Successor updated to node at " + suc.IP + ".\n")
 
-	// Transfer this node keys to the new successor.
-	// Lock the dictionary to read it, and unlock it after.
-	node.dictLock.RLock()
-	in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain this node keys.
-	node.dictLock.RUnlock()
-	if err != nil {
-		log.Error("Error obtaining this node keys.\n")
-		return
-	}
-
-	log.Debug("Transferring keys to the new successor.\n")
-	log.Debug("In:\n")
-	log.Debug(in)
-	log.Debug("Out:\n")
-	log.Debug(out)
-	log.Debug("\n")
-
-	// Transfer the keys to the new successor, to update it.
-	err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: in})
-	if err != nil {
-		log.Error("Error transferring keys to the new successor.\n" + err.Error() + "\n")
-		return
-	}
-	log.Debug("Successful transfer of keys to the new successor.\n")
+	go node.UpdateSuccessorKeys()
 }
 
 // PeriodicallyCheckSuccessor periodically checks whether successor has failed.
