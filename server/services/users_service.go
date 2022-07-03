@@ -18,7 +18,7 @@ type UserServer struct {
 
 func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
 	username := request.GetUsername()
-	user, err := persistency.Load[proto.User](node, filepath.Join("User", username))
+	user, err := persistency.Load[*proto.User](node, filepath.Join("User", username))
 
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*p
 
 	user.PasswordHash = ""
 
-	return &proto.GetUserResponse{User: &user}, nil
+	return &proto.GetUserResponse{User: user}, nil
 }
 
 func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (*proto.EditUserResponse, error) {

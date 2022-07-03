@@ -24,6 +24,10 @@ message HistoryEntry{
   Event event = 4;
 }
 
+message History{
+  repeated HistoryEntry entries = 1;
+}
+
 message AddHistoryEntryRequest{
   HistoryEntry entry = 1;
   repeated string users = 2;

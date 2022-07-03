@@ -29,7 +29,7 @@ func updateGroupHistory(ctx context.Context, action proto.Action, group *proto.G
 func getGroupUsernames(group *proto.Group) ([]string, error) {
 	path := filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](node, path)
+	groupMembers, err := persistency.Load[*proto.GroupMembers](node, path)
 
 	if err != nil {
 		return nil, err
@@ -37,8 +37,8 @@ func getGroupUsernames(group *proto.Group) ([]string, error) {
 
 	usernames := []string{}
 
-	for level := range groupMembers {
-		for username := range groupMembers[level] {
+	for level := range groupMembers.Members {
+		for _, username := range groupMembers.Members[level].Users {
 			usernames = append(usernames, username)
 		}
 	}
@@ -50,18 +50,18 @@ func checkIsGroupOwner(username string, groupId int64) (bool, error) {
 
 	path := filepath.Join("History", username)
 
-	history, err := persistency.Load[[]proto.HistoryEntry](node, path)
+	history, err := persistency.Load[*proto.History](node, path)
 	if err != nil {
 		return false, err
 	}
 
 	count := 0
 
-	for i := 0; i < len(history); i++ {
-		if history[i].Group != nil && history[i].Group.Id == groupId {
-			if history[i].Action == proto.Action_CREATE {
+	for i := 0; i < len(history.Entries); i++ {
+		if history.Entries[i].Group != nil && history.Entries[i].Group.Id == groupId {
+			if history.Entries[i].Action == proto.Action_CREATE {
 				count++
-			} else if history[i].Action == proto.Action_DELETE {
+			} else if history.Entries[i].Action == proto.Action_DELETE {
 				count--
 			}
 		}
@@ -82,13 +82,13 @@ func getUsernameFromContext(ctx context.Context) (string, error) {
 func hasHierarchy(group *proto.Group) (bool, error) {
 	path := filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](node, path)
+	groupMembers, err := persistency.Load[*proto.GroupMembers](node, path)
 
 	if err != nil {
 		return false, err
 	}
 
-	return len(groupMembers[proto.UserLevel_ADMIN]) != 0, nil
+	return len(groupMembers.Members[int32(proto.UserLevel_ADMIN)].GetUsers()) != 0, nil
 }
 
 func updateEventHistory(ctx context.Context, action proto.Action, event *proto.Event, users []string) error {
@@ -139,11 +139,13 @@ func getUserEvents(username string) ([]proto.Event, error) {
 	answer := []proto.Event{}
 	events := make(map[int64]proto.Event)
 
-	entries, err := persistency.Load[[]proto.HistoryEntry](node, filepath.Join("History", username))
+	history, err := persistency.Load[*proto.History](node, filepath.Join("History", username))
 
 	if err != nil {
 		return nil, err
 	}
+
+	entries := history.Entries
 
 	for _, entry := range entries {
 		if entry.Event != nil {
@@ -160,4 +162,9 @@ func getUserEvents(username string) ([]proto.Event, error) {
 	}
 
 	return answer, nil
+}
+
+func remove[T any](s []T, i int) []T {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
 }

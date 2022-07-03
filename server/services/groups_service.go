@@ -49,21 +49,19 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 		return &proto.CreateGroupResponse{}, err
 	}
 
-	members := make(map[proto.UserLevel]map[string]void)
-	members[proto.UserLevel_ADMIN] = make(map[string]void)
-	members[proto.UserLevel_USER] = make(map[string]void)
+	members := proto.GroupMembers{Members: make(map[int32]*proto.UserList)}
 
 	if request.GetHierarchy() {
-		members[proto.UserLevel_ADMIN][username] = empty
+		members.Members[int32(proto.UserLevel_ADMIN)].Users = append(members.Members[int32(proto.UserLevel_ADMIN)].Users, username)
 	} else {
-		members[proto.UserLevel_USER][username] = empty
+		members.Members[int32(proto.UserLevel_USER)].Users = append(members.Members[int32(proto.UserLevel_USER)].Users, username)
 	}
 
 	for _, member := range request.GetUsers() {
 		if _, ok := all_users[member]; ok {
 			continue
 		}
-		members[proto.UserLevel_USER][member] = empty
+		members.Members[int32(proto.UserLevel_USER)].Users = append(members.Members[int32(proto.UserLevel_USER)].Users, member)
 		all_users[member] = empty
 	}
 
@@ -72,12 +70,12 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 			if _, ok := all_users[member]; ok {
 				continue
 			}
-			members[proto.UserLevel_ADMIN][member] = empty
+			members.Members[int32(proto.UserLevel_ADMIN)].Users = append(members.Members[int32(proto.UserLevel_ADMIN)].Users, member)
 			all_users[member] = empty
 		}
 	}
 
-	err = persistency.Save(node, members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
+	err = persistency.Save(node, &members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
 	if err != nil {
 		return &proto.CreateGroupResponse{}, err
 	}
@@ -108,13 +106,13 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 func (*GroupsServer) GetGroup(_ context.Context, request *proto.GetGroupRequest) (*proto.GetGroupResponse, error) {
 
 	id := request.GetId()
-	group, err := persistency.Load[proto.Group](node, filepath.Join("Group", strconv.FormatInt(id, 10)))
+	group, err := persistency.Load[*proto.Group](node, filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &proto.GetGroupResponse{Group: &group}, nil
+	return &proto.GetGroupResponse{Group: group}, nil
 }
 
 func (*GroupsServer) EditGroup(ctx context.Context, request *proto.EditGroupRequest) (*proto.EditGroupResponse, error) {
@@ -141,7 +139,7 @@ func (*GroupsServer) DeleteGroup(ctx context.Context, request *proto.DeleteGroup
 
 	id := request.GetId()
 
-	group, err := persistency.Load[proto.Group](node, filepath.Join("Group", strconv.FormatInt(id, 10)))
+	group, err := persistency.Load[*proto.Group](node, filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
 		return &proto.DeleteGroupResponse{}, err
@@ -158,13 +156,13 @@ func (*GroupsServer) DeleteGroup(ctx context.Context, request *proto.DeleteGroup
 		return &proto.DeleteGroupResponse{}, err
 	}
 
-	usernames, err := getGroupUsernames(&group)
+	usernames, err := getGroupUsernames(group)
 
 	if err != nil {
 		return &proto.DeleteGroupResponse{}, err
 	}
 
-	updateGroupHistory(ctx, proto.Action_DELETE, &group, usernames)
+	updateGroupHistory(ctx, proto.Action_DELETE, group, usernames)
 
 	return &proto.DeleteGroupResponse{}, nil
 }
@@ -177,7 +175,7 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](node, path)
+	groupMembers, err := persistency.Load[*proto.GroupMembers](node, path)
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
@@ -199,17 +197,34 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 		return &proto.AddUserResponse{}, status.Error(codes.PermissionDenied, "Only creator can add admins")
 	}
 
-	if level == proto.UserLevel_USER && len(groupMembers[proto.UserLevel_ADMIN]) != 0 {
-		if _, ok := groupMembers[proto.UserLevel_ADMIN][username]; !ok {
+	if level == proto.UserLevel_USER && len(groupMembers.Members[int32(proto.UserLevel_ADMIN)].Users) != 0 {
+		admins := groupMembers.Members[int32(proto.UserLevel_ADMIN)].Users
+		ok := false
+		for i := range admins {
+			if admins[i] == username {
+				ok = true
+				break
+			}
+		}
+		if !ok {
 			return &proto.AddUserResponse{}, status.Error(codes.PermissionDenied, "Only admins can add users")
 		}
 	}
 
-	if _, ok := groupMembers[level][userID]; ok {
+	users := groupMembers.Members[int32(level)].Users
+
+	ok := false
+	for i := range users {
+		if users[i] == username {
+			ok = true
+			break
+		}
+	}
+	if !ok {
 		return &proto.AddUserResponse{}, status.Error(codes.AlreadyExists, "User is already in group")
 	}
 
-	groupMembers[level][userID] = empty
+	groupMembers.Members[int32(level)].Users = append(groupMembers.Members[int32(level)].Users, userID)
 
 	err = persistency.Save(node, groupMembers, filepath.Join(path))
 
@@ -217,13 +232,13 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 		return &proto.AddUserResponse{}, err
 	}
 
-	group, err := persistency.Load[proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupID, 10)))
+	group, err := persistency.Load[*proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupID, 10)))
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
 	}
 
-	err = updateGroupHistory(ctx, proto.Action_JOINED, &group, []string{userID})
+	err = updateGroupHistory(ctx, proto.Action_JOINED, group, []string{userID})
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
@@ -237,15 +252,15 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](node, path)
+	groupMembers, err := persistency.Load[*proto.GroupMembers](node, path)
 
 	if err != nil {
 		return err
 	}
 
-	for level := range groupMembers {
-		for key := range groupMembers[level] {
-			user, err := persistency.Load[proto.User](node, filepath.Join("User", key))
+	for level := range groupMembers.Members {
+		for key := range groupMembers.Members[level].Users {
+			user, err := persistency.Load[*proto.User](node, filepath.Join("User", groupMembers.Members[level].Users[key]))
 
 			if err != nil {
 				return err
@@ -253,7 +268,7 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 
 			user.PasswordHash = ""
 
-			err = server.Send(&proto.GetGroupUsersResponse{User: &user, Level: level})
+			err = server.Send(&proto.GetGroupUsersResponse{User: user, Level: proto.UserLevel(level)})
 
 			if err != nil {
 				log.Errorf("Error sending response GroupUser: %v", err)
@@ -287,13 +302,21 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](node, path)
+	groupMembers, err := persistency.Load[*proto.GroupMembers](node, path)
 
 	if err != nil {
 		return &proto.RemoveUserResponse{}, err
 	}
 
-	delete(groupMembers[level], userID)
+	users := groupMembers.Members[int32(level)].GetUsers()
+	i := 0
+	for i = range users {
+		if users[i] == userID {
+			break
+		}
+	}
+
+	groupMembers.Members[int32(level)].Users = remove(groupMembers.Members[int32(level)].Users, i)
 
 	err = persistency.Save(node, groupMembers, filepath.Join(path))
 
@@ -301,13 +324,13 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 		return &proto.RemoveUserResponse{}, err
 	}
 
-	group, err := persistency.Load[proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupID, 10)))
+	group, err := persistency.Load[*proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupID, 10)))
 
 	if err != nil {
 		return &proto.RemoveUserResponse{}, err
 	}
 
-	err = updateGroupHistory(ctx, proto.Action_LEFT, &group, []string{userID})
+	err = updateGroupHistory(ctx, proto.Action_LEFT, group, []string{userID})
 
 	if err != nil {
 		return &proto.RemoveUserResponse{}, err

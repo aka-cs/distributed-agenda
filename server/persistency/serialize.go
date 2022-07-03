@@ -1,9 +1,6 @@
 package persistency
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/gob"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,32 +9,23 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-func Save[T any](node *chord.Node, object T, path string) error {
+func Save[T protoreflect.ProtoMessage](node *chord.Node, object T, path string) error {
 	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
 
 	log.Debugf("Saving file: %s", fullPath)
 
-	var buffer bytes.Buffer
-	ioWriter := bufio.NewWriter(&buffer)
-
-	dataEncoder := gob.NewEncoder(ioWriter)
-
-	err := dataEncoder.Encode(object)
+	data, err := proto.Marshal(object)
 
 	if err != nil {
 		log.Errorf("Error serializing object: %v", err)
 		return status.Error(codes.Internal, "Error saving data")
 	}
 
-	err = ioWriter.Flush()
-	if err != nil {
-		log.Errorf("Error flushing buffer")
-		return status.Error(codes.Internal, "Error saving data")
-	}
-
-	err = node.SetKey(fullPath, buffer.Bytes())
+	err = node.SetKey(fullPath, data)
 
 	if err != nil {
 		log.Errorf("Error saving file")
@@ -47,16 +35,13 @@ func Save[T any](node *chord.Node, object T, path string) error {
 	return nil
 }
 
-func Load[T any](node *chord.Node, path string) (T, error) {
+func Load[T protoreflect.ProtoMessage](node *chord.Node, path string) (T, error) {
 
 	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
 
 	log.Debugf("Loading file: %s", fullPath)
 
-	var result T
 	var empty T
-
-	var buffer bytes.Buffer
 
 	data, err := node.GetKey(fullPath)
 
@@ -65,12 +50,8 @@ func Load[T any](node *chord.Node, path string) (T, error) {
 		return empty, status.Errorf(codes.Internal, "")
 	}
 
-	buffer.Write(data)
-
-	ioReader := bufio.NewReader(&buffer)
-
-	dataDecoder := gob.NewDecoder(ioReader)
-	err = dataDecoder.Decode(&result)
+	var result T
+	err = proto.Unmarshal(data, result)
 
 	if err != nil {
 		log.Errorf("Error deserializing object: %v", err)

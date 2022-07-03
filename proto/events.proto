@@ -15,6 +15,10 @@ message Event{
     bool draft = 7;
 }
 
+message Confirmations{
+    map<string, bool> Confirmations = 1;
+}
+
 message GetEventRequest{
     int64 id = 1;
 }
