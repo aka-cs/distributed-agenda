@@ -18,7 +18,7 @@ type UserServer struct {
 
 func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
 	username := request.GetUsername()
-	user, err := persistency.Load[proto.User](filepath.Join("User", username))
+	user, err := persistency.Load[proto.User](&node, filepath.Join("User", username))
 
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*p
 
 func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (*proto.EditUserResponse, error) {
 	user := request.GetUser()
-	err := persistency.Save(user, filepath.Join("User", user.Username))
+	err := persistency.Save(&node, user, filepath.Join("User", user.Username))
 
 	if err != nil {
 		return nil, err

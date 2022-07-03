@@ -1,82 +1,84 @@
 package persistency
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/gob"
 	"errors"
 	"os"
 	"path/filepath"
+	"server/chord"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func Save[T any](object T, path string) error {
-	fullPath := filepath.Join("resources", path+".bin")
+func Save[T any](node *chord.Node, object T, path string) error {
+	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
 
 	log.Debugf("Saving file: %s", fullPath)
 
-	dir := filepath.Dir(fullPath)
+	var buffer bytes.Buffer
+	ioWriter := bufio.NewWriter(&buffer)
 
-	err := os.MkdirAll(dir, os.ModePerm)
+	dataEncoder := gob.NewEncoder(ioWriter)
 
-	if err != nil {
-		log.Errorf("Couldn't create directory: %v", err)
-		return status.Error(codes.Internal, "Couldn't create directory")
-	}
+	err := dataEncoder.Encode(object)
 
-	dataFile, err := os.Create(fullPath)
-
-	defer closeFile(dataFile)
-
-	if err != nil {
-		log.Errorf("Error creating file: %v", err)
-		return status.Error(codes.Internal, "Couldn't create file")
-	}
-	dataEncoder := gob.NewEncoder(dataFile)
-
-	err = dataEncoder.Encode(object)
 	if err != nil {
 		log.Errorf("Error serializing object: %v", err)
-		return status.Error(codes.Internal, "Couldn't serialize object")
+		return status.Error(codes.Internal, "Error saving data")
+	}
+
+	err = ioWriter.Flush()
+	if err != nil {
+		log.Errorf("Error flushing buffer")
+		return status.Error(codes.Internal, "Error saving data")
+	}
+
+	err = node.SetFile(fullPath, buffer.Bytes())
+
+	if err != nil {
+		log.Errorf("Error saving file")
+		return status.Error(codes.Internal, "Error saving data")
 	}
 
 	return nil
 }
 
-func Load[T any](path string) (T, error) {
+func Load[T any](node *chord.Node, path string) (T, error) {
 
-	base := filepath.Base(path)
-
-	fullPath := filepath.Join("resources", path+".bin")
+	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
 
 	log.Debugf("Loading file: %s", fullPath)
 
 	var result T
 	var empty T
 
-	dataFile, err := os.Open(fullPath)
+	var buffer bytes.Buffer
 
-	if err != nil {
-		log.Errorf("Error opening file: %v", err)
-		return empty, status.Errorf(codes.NotFound, "{} not found", base)
-	}
+	data, err := node.GetFile(fullPath)
 
-	defer closeFile(dataFile)
+	buffer.Write(data)
 
-	dataDecoder := gob.NewDecoder(dataFile)
+	ioReader := bufio.NewReader(&buffer)
+
+	dataDecoder := gob.NewDecoder(ioReader)
 	err = dataDecoder.Decode(&result)
 
 	if err != nil {
 		log.Errorf("Error deserializing object: %v", err)
-		return empty, status.Errorf(codes.Internal, "Error returning {}", base)
+		return empty, status.Errorf(codes.Internal, "")
 	}
 
 	return result, nil
 }
 
-func Delete(path string) error {
-	err := os.Remove(filepath.Join("resources", path+".bin"))
+func Delete(node *chord.Node, path string) error {
+	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
+
+	err := node.DeleteFile(fullPath)
 
 	if err != nil {
 		log.Errorf("Error deleting file: %v", err)
@@ -85,18 +87,14 @@ func Delete(path string) error {
 	return nil
 }
 
-func FileExists(path string) bool {
-	fullPath := filepath.Join("resources", path+".bin")
+func FileExists(node *chord.Node, path string) bool {
+	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
+
+	log.Debugf("Checking if file exists: %s", fullPath)
+
 	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	log.Debugf("File already exists: %v", fullPath)
 	return true
-}
-
-func closeFile(file *os.File) {
-	err := file.Close()
-	if err != nil {
-		log.Errorf("Error closing file: %v", err)
-	}
 }

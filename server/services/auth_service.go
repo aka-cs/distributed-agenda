@@ -29,7 +29,7 @@ type AuthServer struct {
 
 func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) (*proto.LoginResponse, error) {
 
-	user, err := persistency.Load[proto.User](filepath.Join("User", request.GetUsername()))
+	user, err := persistency.Load[proto.User](&node, filepath.Join("User", request.GetUsername()))
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +64,11 @@ func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*pro
 	user.Username = strings.ToLower(user.Username)
 	path := filepath.Join("User", user.Username)
 
-	if persistency.FileExists(path) {
+	if persistency.FileExists(&node, path) {
 		return &proto.SignUpResponse{}, status.Error(codes.AlreadyExists, "Username is taken")
 	}
 
-	err := persistency.Save(user, path)
+	err := persistency.Save(&node, user, path)
 
 	if err != nil {
 		return &proto.SignUpResponse{}, err
@@ -76,7 +76,7 @@ func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*pro
 
 	path = filepath.Join("History", user.Username)
 
-	err = persistency.Save([]proto.HistoryEntry{}, path)
+	err = persistency.Save(&node, []proto.HistoryEntry{}, path)
 
 	if err != nil {
 		return &proto.SignUpResponse{}, err

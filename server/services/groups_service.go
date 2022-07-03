@@ -43,7 +43,7 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	generator := rand.New(seed)
 	group.Id = generator.Int63()
 
-	err = persistency.Save(group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
+	err = persistency.Save(&node, group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
 
 	if err != nil {
 		return &proto.CreateGroupResponse{}, err
@@ -77,7 +77,7 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 		}
 	}
 
-	err = persistency.Save(members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
+	err = persistency.Save(&node, members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
 	if err != nil {
 		return &proto.CreateGroupResponse{}, err
 	}
@@ -108,7 +108,7 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 func (*GroupsServer) GetGroup(_ context.Context, request *proto.GetGroupRequest) (*proto.GetGroupResponse, error) {
 
 	id := request.GetId()
-	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(id, 10)))
+	group, err := persistency.Load[proto.Group](&node, filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (*GroupsServer) GetGroup(_ context.Context, request *proto.GetGroupRequest)
 func (*GroupsServer) EditGroup(ctx context.Context, request *proto.EditGroupRequest) (*proto.EditGroupResponse, error) {
 
 	group := request.GetGroup()
-	err := persistency.Save(group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
+	err := persistency.Save(&node, group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
 
 	if err != nil {
 		return &proto.EditGroupResponse{}, err
@@ -141,19 +141,19 @@ func (*GroupsServer) DeleteGroup(ctx context.Context, request *proto.DeleteGroup
 
 	id := request.GetId()
 
-	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(id, 10)))
+	group, err := persistency.Load[proto.Group](&node, filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
 		return &proto.DeleteGroupResponse{}, err
 	}
 
-	err = persistency.Delete(filepath.Join("Group", strconv.FormatInt(id, 10)))
+	err = persistency.Delete(&node, filepath.Join("Group", strconv.FormatInt(id, 10)))
 
 	if err != nil {
 		return &proto.DeleteGroupResponse{}, err
 	}
 
-	err = persistency.Delete(filepath.Join("GroupMembers", strconv.FormatInt(id, 10)))
+	err = persistency.Delete(&node, filepath.Join("GroupMembers", strconv.FormatInt(id, 10)))
 	if err != nil {
 		return &proto.DeleteGroupResponse{}, err
 	}
@@ -177,7 +177,7 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
+	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](&node, path)
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
@@ -211,13 +211,13 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 
 	groupMembers[level][userID] = empty
 
-	err = persistency.Save(groupMembers, filepath.Join(path))
+	err = persistency.Save(&node, groupMembers, filepath.Join(path))
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
 	}
 
-	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(groupID, 10)))
+	group, err := persistency.Load[proto.Group](&node, filepath.Join("Group", strconv.FormatInt(groupID, 10)))
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
@@ -237,7 +237,7 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
+	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](&node, path)
 
 	if err != nil {
 		return err
@@ -245,7 +245,7 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 
 	for level := range groupMembers {
 		for key := range groupMembers[level] {
-			user, err := persistency.Load[proto.User](filepath.Join("User", key))
+			user, err := persistency.Load[proto.User](&node, filepath.Join("User", key))
 
 			if err != nil {
 				return err
@@ -287,7 +287,7 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 
 	path := filepath.Join("GroupMembers", strconv.FormatInt(groupID, 10))
 
-	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](path)
+	groupMembers, err := persistency.Load[map[proto.UserLevel]map[string]void](&node, path)
 
 	if err != nil {
 		return &proto.RemoveUserResponse{}, err
@@ -295,13 +295,13 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 
 	delete(groupMembers[level], userID)
 
-	err = persistency.Save(groupMembers, filepath.Join(path))
+	err = persistency.Save(&node, groupMembers, filepath.Join(path))
 
 	if err != nil {
 		return &proto.RemoveUserResponse{}, err
 	}
 
-	group, err := persistency.Load[proto.Group](filepath.Join("Group", strconv.FormatInt(groupID, 10)))
+	group, err := persistency.Load[proto.Group](&node, filepath.Join("Group", strconv.FormatInt(groupID, 10)))
 
 	if err != nil {
 		return &proto.RemoveUserResponse{}, err
