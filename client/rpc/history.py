@@ -52,10 +52,10 @@ async def update_history():
                 history = [r.entry for r in response]
                 await Storage.async_disk_store(HISTORY, json.dumps(history, cls=HistoryEncoder, indent=2))
             except GRPCError as err:
-                logging.error(f'An error occurred retrieving the full history: {err.status}: {err.message}')
+                logging.error(f'A GRPCError error occurred retrieving the full history: {err.status}: {err.message}')
                 # raise err
             except OSError as err:
-                logging.error(f'An error occurred retrieving the full history: {err}')
+                logging.error(f'An OSError error occurred retrieving the full history: {err}')
                 # raise err
 
         else:
