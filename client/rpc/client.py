@@ -8,6 +8,8 @@ import socket
 from grpclib.client import Channel as BaseChannel
 from grpclib.events import SendRequest, listen, RecvTrailingMetadata
 from grpclib.const import Status
+from grpclib.protocol import H2Protocol
+
 from store import Storage
 
 
@@ -54,6 +56,25 @@ class Channel(BaseChannel):
             logging.info("Token expired")
             await Storage.async_disk_delete('token')
 
+    async def __connect__(self) -> H2Protocol:
+        while True:
+            try:
+                return await super().__connect__()
+            except OSError as err:
+                logging.error("Error connecting to server %s:%s", self._host, self._port)
+                try:
+                    Storage.get('server', ['localhost']).remove(self._host)
+                except KeyError:
+                    pass
+                except ValueError:
+                    pass
+                if len(Storage.get('server', [])) != 0:
+                    self._host = get_host()
+                    logging.info("Trying to connect to %s:%s", self._host, self._port)
+                else:
+                    logging.error("No servers available")
+                    raise err
+
 
 async def logout():
     Storage.clear()
@@ -82,6 +103,7 @@ def discover():
         # udp broadcast on broadcast address
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(1)
         sock.sendto(b'Hello', (broadcast, 8830))
 
         response = None
@@ -90,6 +112,10 @@ def discover():
             try:
                 logging.info("Waiting for response")
                 response, address = sock.recvfrom(1024)
+                logging.info(f"Received {response} from {address}")
+                yield address[0]
+            except socket.timeout:
+                logging.info("Timeout")
                 break
             except BaseException as e:
                 logging.info(f"Error: {e}")
@@ -100,8 +126,7 @@ def discover():
             logging.info(f"Error closing socket: {e}")
 
         if response and address:
-            logging.info(f"Received {response} from {address}")
-            return [address[0]]
+            break
     logging.info("No more servers found")
 
 
@@ -111,3 +136,6 @@ def update_servers():
     if servers:
         logging.info("Updating servers")
         Storage.store('server', servers)
+    else:
+        logging.info("No servers found")
+        Storage.delete('server')
