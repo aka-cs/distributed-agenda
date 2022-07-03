@@ -411,7 +411,7 @@ func (node *Node) FixStorage(key string) {
 	if !Equals(keyNode.ID, node.ID) && !Equals(keyNode.ID, pred.ID) {
 		// Lock the storage dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
-		value, err := node.dictionary.Get(key) // Get the value associated to the key.
+		value, err := node.dictionary.Get(key, "") // Get the value associated to the key.
 		node.dictLock.RUnlock()
 		if err != nil {
 			// Don't report the error and return, because if the key is no longer in the dictionary
@@ -421,7 +421,7 @@ func (node *Node) FixStorage(key string) {
 
 		// Lock the storage dictionary to write on it, and unlock it after.
 		node.dictLock.Lock()
-		err = node.dictionary.Delete(key) // Delete the key from local storage.
+		err = node.dictionary.Delete(key, "") // Delete the key from local storage.
 		node.dictLock.Unlock()
 		if err != nil {
 			log.Errorf("Error deleting key %s in local storage.\n%s", keyNode.IP, err.Error())
@@ -435,7 +435,7 @@ func (node *Node) FixStorage(key string) {
 			// In case of error, reinsert the key on this node storage, to prevent the loss of information.
 			// Lock the storage dictionary to write on it, and unlock it after.
 			node.dictLock.Lock()
-			err = node.dictionary.Set(key, value) // Reinsert the key on local storage.
+			err = node.dictionary.Set(key, value, "") // Reinsert the key on local storage.
 			node.dictLock.Unlock()
 			if err != nil {
 				log.Errorf("Error reinserting key %s in local storage.\n%s", keyNode.IP, err.Error())

@@ -46,7 +46,7 @@ func GetOutboundIP() net.IP {
 	return localAddr.IP
 }
 
-func Keys(dictionary map[string][]byte) []string {
+func Keys[T](dictionary map[string]T) []string {
 	keys := make([]string, 0)
 
 	for key := range dictionary {
