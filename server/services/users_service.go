@@ -18,7 +18,9 @@ type UserServer struct {
 
 func (*UserServer) GetUser(_ context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
 	username := request.GetUsername()
-	user, err := persistency.Load[*proto.User](node, filepath.Join("User", username))
+
+	user := &proto.User{}
+	user, err := persistency.Load(node, filepath.Join("User", username), user)
 
 	if err != nil {
 		return nil, err

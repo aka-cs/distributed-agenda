@@ -29,7 +29,8 @@ type AuthServer struct {
 
 func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) (*proto.LoginResponse, error) {
 
-	user, err := persistency.Load[*proto.User](node, filepath.Join("User", request.GetUsername()))
+	user := &proto.User{}
+	user, err := persistency.Load(node, filepath.Join("User", request.GetUsername()), user)
 	if err != nil {
 		return nil, err
 	}

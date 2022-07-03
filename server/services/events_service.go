@@ -24,7 +24,8 @@ type EventsServer struct {
 func (*EventsServer) GetEvent(_ context.Context, request *proto.GetEventRequest) (*proto.GetEventResponse, error) {
 
 	id := request.GetId()
-	event, err := persistency.Load[*proto.Event](node, filepath.Join("Event", strconv.FormatInt(id, 10)))
+	event := &proto.Event{}
+	event, err := persistency.Load(node, filepath.Join("Event", strconv.FormatInt(id, 10)), event)
 
 	if err != nil {
 		return nil, err
@@ -54,7 +55,8 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 	groupId := request.GetEvent().GetGroupId()
 
 	if groupId != 0 {
-		group, err := persistency.Load[*proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupId, 10)))
+		group := &proto.Group{}
+		group, err := persistency.Load(node, filepath.Join("Group", strconv.FormatInt(groupId, 10)), group)
 
 		if err != nil {
 			return &proto.CreateEventResponse{}, err
@@ -65,9 +67,7 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 			return &proto.CreateEventResponse{}, err
 		}
 
-		for _, member := range usernames {
-			users.Users = append(users.Users, member)
-		}
+		users.Users = append(users.Users, usernames...)
 
 		hierarchy, err := hasHierarchy(group)
 
@@ -125,7 +125,8 @@ func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEvent
 
 	path := filepath.Join("Event", strconv.FormatInt(id, 10))
 
-	event, err := persistency.Load[*proto.Event](node, path)
+	event := &proto.Event{}
+	event, err := persistency.Load(node, path, event)
 
 	if err != nil {
 		return &proto.DeleteEventResponse{}, err
@@ -139,7 +140,8 @@ func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEvent
 
 	ppath := filepath.Join("EventParticipants", strconv.FormatInt(event.Id, 10))
 
-	members, err := persistency.Load[*proto.UserList](node, ppath)
+	members := &proto.UserList{}
+	members, err = persistency.Load(node, ppath, members)
 
 	if err != nil {
 		return &proto.DeleteEventResponse{}, err
@@ -170,7 +172,8 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 
 	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
 
-	confirmations, err := persistency.Load[*proto.Confirmations](node, path)
+	confirmations := &proto.Confirmations{}
+	confirmations, err = persistency.Load(node, path, confirmations)
 
 	if err != nil {
 		return &proto.ConfirmEventResponse{}, err
@@ -190,7 +193,8 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 
 	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
 
-	event, err := persistency.Load[*proto.Event](node, path)
+	event := &proto.Event{}
+	event, err = persistency.Load(node, path, event)
 
 	updateEventHistory(ctx, proto.Action_CONFIRM, event, []string{username})
 
@@ -230,7 +234,8 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 
 	path := filepath.Join("EventConfirmations", strconv.FormatInt(request.GetEventId(), 10))
 
-	confirmations, err := persistency.Load[*proto.Confirmations](node, path)
+	confirmations := &proto.Confirmations{}
+	confirmations, err = persistency.Load(node, path, confirmations)
 
 	if err != nil {
 		return &proto.RejectEventResponse{}, err
@@ -248,7 +253,8 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 
 	path = filepath.Join("Event", strconv.FormatInt(request.GetEventId(), 10))
 
-	event, err := persistency.Load[*proto.Event](node, path)
+	event := &proto.Event{}
+	event, err = persistency.Load(node, path, event)
 
 	if err != nil {
 		return &proto.RejectEventResponse{}, err

@@ -35,7 +35,7 @@ func Save[T protoreflect.ProtoMessage](node *chord.Node, object T, path string) 
 	return nil
 }
 
-func Load[T protoreflect.ProtoMessage](node *chord.Node, path string) (T, error) {
+func Load[T protoreflect.ProtoMessage](node *chord.Node, path string, result T) (T, error) {
 
 	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
 
@@ -50,7 +50,6 @@ func Load[T protoreflect.ProtoMessage](node *chord.Node, path string) (T, error)
 		return empty, status.Errorf(codes.Internal, "")
 	}
 
-	var result T
 	err = proto.Unmarshal(data, result)
 
 	if err != nil {
