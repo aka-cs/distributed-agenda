@@ -14,14 +14,14 @@ import (
 func Save[T any](object T, path string) error {
 	fullPath := filepath.Join("resources", path+".bin")
 
-	log.Debugf("Saving file: %s\n", fullPath)
+	log.Debugf("Saving file: %s", fullPath)
 
 	dir := filepath.Dir(fullPath)
 
 	err := os.MkdirAll(dir, os.ModePerm)
 
 	if err != nil {
-		log.Errorf("Couldn't create directory:\n%v\n", err)
+		log.Errorf("Couldn't create directory: %v", err)
 		return status.Error(codes.Internal, "Couldn't create directory")
 	}
 
@@ -30,14 +30,14 @@ func Save[T any](object T, path string) error {
 	defer closeFile(dataFile)
 
 	if err != nil {
-		log.Errorf("Error creating file:\n%v\n", err)
+		log.Errorf("Error creating file: %v", err)
 		return status.Error(codes.Internal, "Couldn't create file")
 	}
 	dataEncoder := gob.NewEncoder(dataFile)
 
 	err = dataEncoder.Encode(object)
 	if err != nil {
-		log.Errorf("Error serializing object:\n%v\n", err)
+		log.Errorf("Error serializing object: %v", err)
 		return status.Error(codes.Internal, "Couldn't serialize object")
 	}
 
@@ -50,7 +50,7 @@ func Load[T any](path string) (T, error) {
 
 	fullPath := filepath.Join("resources", path+".bin")
 
-	log.Debugf("Loading file: %s\n", fullPath)
+	log.Debugf("Loading file: %s", fullPath)
 
 	var result T
 	var empty T
@@ -58,7 +58,7 @@ func Load[T any](path string) (T, error) {
 	dataFile, err := os.Open(fullPath)
 
 	if err != nil {
-		log.Errorf("Error opening file:\n%v\n", err)
+		log.Errorf("Error opening file: %v", err)
 		return empty, status.Errorf(codes.NotFound, "{} not found", base)
 	}
 
@@ -68,7 +68,7 @@ func Load[T any](path string) (T, error) {
 	err = dataDecoder.Decode(&result)
 
 	if err != nil {
-		log.Errorf("Error deserializing object:\n%v\n", err)
+		log.Errorf("Error deserializing object: %v", err)
 		return empty, status.Errorf(codes.Internal, "Error returning {}", base)
 	}
 
@@ -79,7 +79,7 @@ func Delete(path string) error {
 	err := os.Remove(filepath.Join("resources", path+".bin"))
 
 	if err != nil {
-		log.Errorf("Error deleting file:\n%v\n", err)
+		log.Errorf("Error deleting file: %v", err)
 		return status.Error(codes.Internal, "Couldn't delete file")
 	}
 	return nil
@@ -90,13 +90,13 @@ func FileExists(path string) bool {
 	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
-	log.Debugf("File already exists: %v\n", fullPath)
+	log.Debugf("File already exists: %v", fullPath)
 	return true
 }
 
 func closeFile(file *os.File) {
 	err := file.Close()
 	if err != nil {
-		log.Errorf("Error closing file:\n%v\n", err)
+		log.Errorf("Error closing file: %v", err)
 	}
 }

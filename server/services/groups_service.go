@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -257,7 +257,7 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 			err = server.Send(&proto.GetGroupUsersResponse{User: &user, Level: level})
 
 			if err != nil {
-				log.Errorf("Error sending response GroupUser:\n%v\n", err)
+				log.Errorf("Error sending response GroupUser: %v", err)
 				return status.Error(codes.Internal, "Error sending response")
 			}
 		}
@@ -318,7 +318,7 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 }
 
 func StartGroupService(network string, address string) {
-	log.Infof("Group Service Started\n")
+	log.Infof("Group Service Started")
 
 	lis, err := net.Listen(network, address)
 
@@ -405,13 +405,13 @@ func checkIsOwner(username string, groupId int64) (bool, error) {
 }
 
 func getUsernameFromContext(ctx context.Context) (string, error) {
-	jwtToken, err := ValidateRequest(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 
-	if err != nil {
-		return "", err
+	if !ok {
+		return "", status.Error(codes.Internal, "")
 	}
 
-	return jwtToken.Claims.(jwt.MapClaims)["sub"].(string), nil
+	return md["username"][0], nil
 }
 
 func hasHierarchy(group *proto.Group) (bool, error) {

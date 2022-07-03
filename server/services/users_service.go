@@ -34,14 +34,14 @@ func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (
 	err := persistency.Save(user, filepath.Join("User", user.Username))
 
 	if err != nil {
-		return &proto.EditUserResponse{}, err
+		return nil, err
 	}
 
 	return &proto.EditUserResponse{}, nil
 }
 
 func StartUserService(network string, address string) {
-	log.Infof("User Service Started\n")
+	log.Infof("User Service Started")
 
 	lis, err := net.Listen(network, address)
 

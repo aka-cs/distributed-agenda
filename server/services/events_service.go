@@ -276,7 +276,7 @@ func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*prot
 }
 
 func StartEventService(network string, address string) {
-	log.Infof("Event Service Started\n")
+	log.Infof("Event Service Started")
 
 	lis, err := net.Listen(network, address)
 

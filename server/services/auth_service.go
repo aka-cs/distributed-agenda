@@ -35,7 +35,7 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(request.Password))
 	if err != nil {
-		log.Infof("Permission denied:\n%v\n", err)
+		log.Infof("Permission denied: %v", err)
 		return nil, status.Errorf(codes.PermissionDenied, "Wrong username or password")
 	}
 
@@ -51,7 +51,7 @@ func (server *AuthServer) Login(_ context.Context, request *proto.LoginRequest) 
 
 	tokenString, err := token.SignedString(server.jwtPrivateKey)
 	if err != nil {
-		log.Errorf("Error creating token:\n%v\n", err)
+		log.Errorf("Error creating token: %v", err)
 		return nil, status.Errorf(codes.Internal, "")
 	}
 
@@ -86,7 +86,7 @@ func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*pro
 }
 
 func StartAuthServer(rsaPrivateKey string, network string, address string) {
-	log.Infof("Auth service started\n")
+	log.Infof("Auth service started")
 
 	lis, err := net.Listen(network, address)
 
@@ -96,11 +96,11 @@ func StartAuthServer(rsaPrivateKey string, network string, address string) {
 
 	key, err := ioutil.ReadFile(rsaPrivateKey)
 	if err != nil {
-		log.Fatalf("Error reading the jwt private key:\n%v\n", err)
+		log.Fatalf("Error reading the jwt private key: %v", err)
 	}
 	parsedKey, err := jwt.ParseRSAPrivateKeyFromPEM(key)
 	if err != nil {
-		log.Fatalf("Error parsing the jwt private key:\n%v\n", err)
+		log.Fatalf("Error parsing the jwt private key: %v", err)
 	}
 
 	s := grpc.NewServer(
@@ -145,13 +145,13 @@ func ValidateRequest(ctx context.Context) (*jwt.Token, error) {
 	key, err := ioutil.ReadFile("pub.pem")
 
 	if err != nil {
-		log.Fatalf("Error reading the jwt public key:\n%v\n", err)
+		log.Fatalf("Error reading the jwt public key: %v", err)
 	}
 
 	publicKey, err := jwt.ParseRSAPublicKeyFromPEM(key)
 
 	if err != nil {
-		log.Fatalf("Error parsing the jwt public key:\n%v\n", err)
+		log.Fatalf("Error parsing the jwt public key: %v", err)
 	}
 
 	md, ok := metadata.FromIncomingContext(ctx)

@@ -35,6 +35,7 @@ class Channel(BaseChannel):
 
     def __init__(self, *args, **kwargs):
         host = get_host()
+        logging.info('Connecting to %s', host)
         super(Channel, self).__init__(host, *args, **kwargs)
 
         listen(self, SendRequest, self.on_send_request)
@@ -84,16 +85,24 @@ def discover():
         sock.sendto(b'Hello', (broadcast, 8830))
 
         response = None
+        address = None
         while True:
             try:
-                response = sock.recv(1024)
-            except:
+                logging.info("Waiting for response")
+                response, address = sock.recvfrom(1024)
                 break
-        sock.close()
+            except BaseException as e:
+                logging.info(f"Error: {e}")
+                break
+        try:
+            sock.close()
+        except BaseException as e:
+            logging.info(f"Error closing socket: {e}")
 
-        if response:
-            logging.info(f"Found server at {response.decode()}")
-            yield response.decode()
+        if response and address:
+            logging.info(f"Received {response} from {address}")
+            return [address[0]]
+    logging.info("No more servers found")
 
 
 def update_servers():
