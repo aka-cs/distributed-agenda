@@ -18,7 +18,7 @@ async def get_all_groups():
 
     # add group if group created, remove if group deleted
     for entry in history:
-        if not entry.group:
+        if not entry.HasField('group'):
             continue
         if entry.action == Action.CREATE:
             groups[entry.group.id] = entry.group
@@ -42,7 +42,7 @@ async def create_group(users, name, description='', hierarchy=False):
         stub = proto.groups_grpc.GroupServiceStub(channel)
         logging.info(f'Creating group with users {users} and hierarchy {hierarchy}')
         response = await stub.CreateGroup(request)
-        logging.info(f'Group created with result {response.result}')
+        logging.info(f'Group created with response {response}')
 
     return response
 
