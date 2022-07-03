@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Configuration of Node.
+// Configuration of a Node.
 type Configuration struct {
 	Hash     func() hash.Hash // Hash function to use.
 	HashSize int              // Hash size supported.
@@ -21,7 +21,7 @@ type Configuration struct {
 	StabilizingNodes int // Max number of successors to register in a node, to ensure stabilization.
 }
 
-// DefaultConfig returns a default configuration.
+// DefaultConfig creates and returns a default Configuration.
 func DefaultConfig() *Configuration {
 	Hash := sha1.New              // Use sha1 as the hash function.
 	HashSize := Hash().Size() * 8 // Save the hash size supported.

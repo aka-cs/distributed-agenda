@@ -63,6 +63,7 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 	return node, nil
 }
 
+// DefaultNode creates and returns a new Node with default configurations.
 func DefaultNode(port string) (*Node, error) {
 	conf := DefaultConfig()
 	transport := NewGRPCServices(conf)
