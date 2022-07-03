@@ -161,7 +161,7 @@ func (node *Node) Stop() error {
 
 func (node *Node) GetFile(key string) ([]byte, error) {
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(nil, node.config.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
 
 	response, err := node.Get(ctx, &chord.GetRequest{Key: key})
@@ -174,7 +174,7 @@ func (node *Node) GetFile(key string) ([]byte, error) {
 
 func (node *Node) SetFile(key string, value []byte) error {
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(nil, node.config.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
 
 	_, err := node.Set(ctx, &chord.SetRequest{Key: key, Value: value})
@@ -184,7 +184,7 @@ func (node *Node) SetFile(key string, value []byte) error {
 
 func (node *Node) DeleteFile(key string) error {
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(nil, node.config.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
 
 	_, err := node.Delete(ctx, &chord.DeleteRequest{Key: key})
