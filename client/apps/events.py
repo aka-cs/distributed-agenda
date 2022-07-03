@@ -1,10 +1,11 @@
 import datetime
+import logging
 
 import streamlit as st
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from data.create_data import create_table
-from rpc.events import create_event
+from rpc.events import create_event, get_user_events
 from rpc.history import update_history
 
 
@@ -15,7 +16,10 @@ async def app():
     st.write("See `apps/events.py` to know how to use it.")
 
     st.markdown("### Sample Data")
-    df = create_table()
+
+    user_events = await get_user_events()
+
+    df = create_table(user_events[0])
     st.write(df)
 
     st.write('Navigate to `Data Stats` page to visualize the data')
