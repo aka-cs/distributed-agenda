@@ -1,18 +1,13 @@
 package main
 
 import (
-	log "github.com/sirupsen/logrus"
-	easy "github.com/t-tomalak/logrus-easy-formatter"
+	"server/logging"
 	"server/services"
 )
 
 func main() {
 
-	log.SetLevel(log.InfoLevel)
-	log.SetFormatter(&easy.Formatter{
-		TimestampFormat: "15:04:05",
-		LogFormat:       "[%lvl%]: %time% - %msg%",
-	})
+	logging.SettingLogger("server")
 
 	rsaKeyPath := "pv.pem"
 	network := "tcp"

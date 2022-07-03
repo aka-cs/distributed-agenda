@@ -41,7 +41,7 @@ func (*UserServer) EditUser(_ context.Context, request *proto.EditUserRequest) (
 }
 
 func StartUserService(network string, address string) {
-	log.Infof("User Service Started\n")
+	log.Infof("User Service Started")
 
 	lis, err := net.Listen(network, address)
 

@@ -257,7 +257,7 @@ func (*GroupsServer) GetGroupUsers(request *proto.GetGroupUsersRequest, server p
 			err = server.Send(&proto.GetGroupUsersResponse{User: &user, Level: level})
 
 			if err != nil {
-				log.Errorf("Error sending response GroupUser:\n%v\n", err)
+				log.Errorf("Error sending response GroupUser: %v", err)
 				return status.Error(codes.Internal, "Error sending response")
 			}
 		}
@@ -318,7 +318,7 @@ func (*GroupsServer) RemoveUser(ctx context.Context, request *proto.RemoveUserRe
 }
 
 func StartGroupService(network string, address string) {
-	log.Infof("Group Service Started\n")
+	log.Infof("Group Service Started")
 
 	lis, err := net.Listen(network, address)
 

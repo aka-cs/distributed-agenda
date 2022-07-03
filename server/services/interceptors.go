@@ -24,7 +24,7 @@ func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.Una
 	md, ok := metadata.FromIncomingContext(ctx)
 
 	if !ok {
-		log.Error("Error extracting metadata from context\n")
+		log.Error("Error extracting metadata from context")
 		return nil, status.Error(codes.Internal, "")
 	}
 
@@ -55,13 +55,13 @@ func StreamServerInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.S
 func UnaryLoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	p, _ := peer.FromContext(ctx)
 
-	log.Debugf("Request received - Method:%s From:%s\n", info.FullMethod, p.Addr.String())
+	log.Debugf("Request received - Method:%s From:%s", info.FullMethod, p.Addr.String())
 
 	start := time.Now()
 
 	h, err := handler(ctx, req)
 
-	log.Debugf("Request completed - Method:%s\tDuration:%s\tError:%v\n",
+	log.Debugf("Request completed - Method:%s\tDuration:%s\tError:%v",
 		info.FullMethod,
 		time.Since(start),
 		err)
@@ -75,13 +75,13 @@ func StreamLoggingInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.
 
 	p, _ := peer.FromContext(ctx)
 
-	log.Debugf("Streaming request received - Method:%s From:%s\n", info.FullMethod, p.Addr.String())
+	log.Debugf("Streaming request received - Method:%s From:%s", info.FullMethod, p.Addr.String())
 
 	start := time.Now()
 
 	err := handler(srv, ss)
 
-	log.Debugf("Streaming Request completed - Method:%s\tDuration:%s\tError:%v\n",
+	log.Debugf("Streaming Request completed - Method:%s\tDuration:%s\tError:%v",
 		info.FullMethod,
 		time.Since(start),
 		err)

@@ -55,7 +55,7 @@ func (*HistoryServer) GetFullHistory(request *proto.GetFullHistoryRequest, strea
 		})
 
 		if err != nil {
-			log.Errorf("Error sending response GetFullHistory:\n%v\n", err)
+			log.Errorf("Error sending response GetFullHistory: %v", err)
 			return status.Error(codes.Internal, "Error sending response")
 		}
 	}
@@ -80,7 +80,7 @@ func (*HistoryServer) GetHistoryFromOffset(request *proto.GetHistoryFromOffsetRe
 		})
 
 		if err != nil {
-			log.Errorf("Error sending response GetHistoryFromOffset:\n%v\n", err)
+			log.Errorf("Error sending response GetHistoryFromOffset:%v", err)
 			return status.Error(codes.Internal, "Error sending response")
 		}
 	}
@@ -88,7 +88,7 @@ func (*HistoryServer) GetHistoryFromOffset(request *proto.GetHistoryFromOffsetRe
 }
 
 func StartHistoryService(network string, address string) {
-	log.Infof("History Service Started\n")
+	log.Infof("History Service Started")
 
 	lis, err := net.Listen(network, address)
 
