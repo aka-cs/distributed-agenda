@@ -56,6 +56,7 @@ message Node {
 // GetRequest contains the key of a desired value.
 message GetRequest {
   string Key = 1;
+  bool Lock = 2;
 }
 
 // GetResponse contains the value of a requested key.
@@ -68,12 +69,14 @@ message SetRequest {
   string Key = 1;
   bytes Value = 2;
   bool Replica = 3;
+  bool Lock = 4;
 }
 
 // DeleteRequest contains the key to eliminate.
 message DeleteRequest {
   string Key = 1;
   bool Replica = 2;
+  bool Lock = 3;
 }
 
 // PartitionResponse contains the contains the <key, value> pairs to return.

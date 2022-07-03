@@ -15,25 +15,39 @@ type Storage interface {
 	Get(string) ([]byte, error)
 	Set(string, []byte) error
 	Delete(string) error
+
 	Partition([]byte, []byte) (map[string][]byte, map[string][]byte, error)
 	Extend(map[string][]byte) error
 	Discard(data []string) error
+
+	All() map[string][]byte
+	Keys() []string
 	Clear() error
+
+	IsLocked(string) bool
+	Lock(string, string) error
+	Unlock(string, string) error
 }
 
 type Dictionary struct {
 	data map[string][]byte // Internal dictionary
+	lock map[string]string // Lock states
 	Hash func() hash.Hash  // Hash function to use
 }
 
 func NewDictionary(hash func() hash.Hash) *Dictionary {
 	return &Dictionary{
 		data: make(map[string][]byte),
+		lock: make(map[string]string),
 		Hash: hash,
 	}
 }
 
 func (dictionary *Dictionary) Get(key string) ([]byte, error) {
+	if dictionary.IsLocked(key) {
+		return nil, errors.New("A")
+	}
+
 	value, ok := dictionary.data[key]
 	if !ok {
 		return nil, errors.New("Key not found.\n")
@@ -42,11 +56,19 @@ func (dictionary *Dictionary) Get(key string) ([]byte, error) {
 }
 
 func (dictionary *Dictionary) Set(key string, value []byte) error {
+	if dictionary.IsLocked(key) {
+		return errors.New("A")
+	}
+
 	dictionary.data[key] = value
 	return nil
 }
 
 func (dictionary *Dictionary) Delete(key string) error {
+	if dictionary.IsLocked(key) {
+		return errors.New("A")
+	}
+
 	delete(dictionary.data, key)
 	return nil
 }
@@ -59,12 +81,7 @@ func (dictionary *Dictionary) Partition(L, R []byte) (map[string][]byte, map[str
 		return dictionary.data, out, nil
 	}
 
-	for key := range dictionary.data {
-		value, err := dictionary.Get(key)
-		if err != nil {
-			return nil, nil, err
-		}
-
+	for key, value := range dictionary.data {
 		if between, err := KeyBetween(key, dictionary.Hash, L, R); between && err == nil {
 			in[key] = value
 		} else if !between && err == nil {
@@ -79,27 +96,47 @@ func (dictionary *Dictionary) Partition(L, R []byte) (map[string][]byte, map[str
 
 func (dictionary *Dictionary) Extend(data map[string][]byte) error {
 	for key, value := range data {
-		err := dictionary.Set(key, value)
-		if err != nil {
-			return err
-		}
+		dictionary.data[key] = value
 	}
 	return nil
 }
 
 func (dictionary *Dictionary) Discard(data []string) error {
 	for _, key := range data {
-		err := dictionary.Delete(key)
-		if err != nil {
-			return err
-		}
+		delete(dictionary.data, key)
 	}
 
 	return nil
 }
 
 func (dictionary *Dictionary) Clear() error {
-	return dictionary.Discard(Keys(dictionary.data))
+	dictionary.data = make(map[string][]byte)
+	return nil
+}
+
+func (dictionary *Dictionary) IsLocked(key string) bool {
+	_, ok := dictionary.lock[key]
+	return ok
+}
+
+func (dictionary *Dictionary) Lock(key, permission string) error {
+	if value, ok := dictionary.lock[key]; ok && value == permission {
+		delete(dictionary.lock, key)
+	} else if value != permission {
+		return errors.New("A")
+	}
+
+	return nil
+}
+
+func (dictionary *Dictionary) Unlock(key, permission string) error {
+	if value, ok := dictionary.lock[key]; ok && value == permission {
+		delete(dictionary.lock, key)
+	} else if value != permission {
+		return errors.New("A")
+	}
+
+	return nil
 }
 
 type DiskDictionary struct {
