@@ -60,6 +60,11 @@ func Load[T any](node *chord.Node, path string) (T, error) {
 
 	data, err := node.GetFile(fullPath)
 
+	if err != nil {
+		log.Errorf("Error getting file: %v", err)
+		return empty, status.Errorf(codes.Internal, "")
+	}
+
 	buffer.Write(data)
 
 	ioReader := bufio.NewReader(&buffer)
@@ -92,7 +97,7 @@ func FileExists(node *chord.Node, path string) bool {
 
 	log.Debugf("Checking if file exists: %s", fullPath)
 
-	if _, err := os.Stat(fullPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := node.GetFile(fullPath); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	log.Debugf("File already exists: %v", fullPath)

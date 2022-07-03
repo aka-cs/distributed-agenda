@@ -27,5 +27,9 @@ func Start(rsaPrivateKeyPath string, rsaPublicteKeyPath string, network string) 
 	go StartEventService(network, "0.0.0.0:50053")
 	go StartAuthServer(rsaPrivateKeyPath, network, "0.0.0.0:50054")
 	go StartHistoryService(network, "0.0.0.0:50055")
-	StartUserService(network, "0.0.0.0:50051")
+	go StartUserService(network, "0.0.0.0:50051")
+
+	for {
+
+	}
 }
