@@ -66,9 +66,9 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 
 // DefaultNode creates and returns a new Node with default configurations.
 func DefaultNode(port string) (*Node, error) {
-	conf := DefaultConfig()                // Creates a default configuration.
-	transport := NewGRPCServices(conf)     // Creates a default RPC transport layer.
-	dictionary := NewDictionary(conf.Hash) // Creates a default dictionary.
+	conf := DefaultConfig()                    // Creates a default configuration.
+	transport := NewGRPCServices(conf)         // Creates a default RPC transport layer.
+	dictionary := NewDiskDictionary(conf.Hash) // Creates a default dictionary.
 
 	// Return the default node.
 	return NewNode(port, conf, transport, dictionary)
@@ -230,9 +230,13 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	if req.Replica {
 		log.Debug("Resolving set request locally (replication).")
 
-		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
-		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
+		node.dictLock.Lock()                           // Lock the dictionary to write on it, and unlock it after.
+		err := node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
+		if err != nil {
+			log.Error("Error setting key.")
+			return emptyResponse, errors.New("error setting key\n" + err.Error())
+		}
 
 		log.Info("Successful set.")
 		return emptyResponse, nil
@@ -261,9 +265,13 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	if Equals(keyNode.ID, node.ID) {
 		log.Debug("Resolving set request locally.")
 
-		node.dictLock.Lock()                    // Lock the dictionary to write on it, and unlock it after.
-		node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
+		node.dictLock.Lock()                           // Lock the dictionary to write on it, and unlock it after.
+		err := node.dictionary.Set(req.Key, req.Value) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
+		if err != nil {
+			log.Error("Error setting key.")
+			return emptyResponse, errors.New("error setting key\n" + err.Error())
+		}
 
 		log.Info("Successful set.")
 
@@ -300,9 +308,13 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	if req.Replica {
 		log.Debug("Resolving delete request locally (replication).")
 
-		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it after.
-		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
+		node.dictLock.Lock()                   // Lock the dictionary to write on it, and unlock it after.
+		err := node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
+		if err != nil {
+			log.Error("Error deleting key.")
+			return emptyResponse, errors.New("error deleting key\n" + err.Error())
+		}
 
 		log.Info("Successful delete.")
 		return emptyResponse, nil
@@ -331,9 +343,13 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	if Equals(keyNode.ID, node.ID) {
 		log.Debug("Resolving delete request locally.")
 
-		node.dictLock.Lock()            // Lock the dictionary to write on it, and unlock it at the end of function.
-		node.dictionary.Delete(req.Key) // Delete the <key, value> pair from storage.
+		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
+		err := node.dictionary.Delete(req.Key)
 		node.dictLock.Unlock()
+		if err != nil {
+			log.Error("Error deleting key.")
+			return emptyResponse, errors.New("error deleting key\n" + err.Error())
+		}
 
 		log.Info("Successful delete.")
 

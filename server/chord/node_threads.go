@@ -421,17 +421,26 @@ func (node *Node) FixStorage(key string) {
 
 		// Lock the storage dictionary to write on it, and unlock it after.
 		node.dictLock.Lock()
-		node.dictionary.Delete(key) // Delete the key from local storage.
+		err = node.dictionary.Delete(key) // Delete the key from local storage.
 		node.dictLock.Unlock()
+		if err != nil {
+			log.Errorf("Error deleting key %s in local storage.\n%s", keyNode.IP, err.Error())
+			return
+		}
 
 		// Set this <key, value> pair on the corresponding node.
 		err = node.RPC.Set(keyNode, &chord.SetRequest{Key: key, Value: value})
 		if err != nil {
+			log.Errorf("Error relocating key %s to %s.\n%s", key, keyNode.IP, err.Error())
 			// In case of error, reinsert the key on this node storage, to prevent the loss of information.
 			// Lock the storage dictionary to write on it, and unlock it after.
 			node.dictLock.Lock()
-			node.dictionary.Set(key, value) // Reinsert the key on local storage.
+			err = node.dictionary.Set(key, value) // Reinsert the key on local storage.
 			node.dictLock.Unlock()
+			if err != nil {
+				log.Errorf("Error reinserting key %s in local storage.\n%s", keyNode.IP, err.Error())
+				return
+			}
 			return
 		}
 	}

@@ -54,9 +54,13 @@ func (node *Node) Start() error {
 	node.successors.PushBack(node.Node)                                  // Set this node as its own successor.
 	node.predecessor = node.Node                                         // Set this node as it own predecessor.
 	node.fingerTable = NewFingerTable(node.config.HashSize)              // Create the finger table.
-	node.dictionary.Clear()                                              // Clear the node dictionary.
 	node.server = grpc.NewServer(node.config.ServerOpts...)              // Create the node server.
 	node.sock = listener.(*net.TCPListener)                              // Save the socket.
+	err = node.dictionary.Clear()                                        // Clear the node dictionary.
+	if err != nil {
+		log.Errorf("Error starting server: invalid storage dictionary.")
+		return errors.New("error starting server: invalid storage dictionary\n" + err.Error())
+	}
 
 	chord.RegisterChordServer(node.server, node) // Register the node server as a chord server.
 	log.Debug("Chord services registered.")
