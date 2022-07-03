@@ -19,7 +19,7 @@ func updateGroupHistory(ctx context.Context, action proto.Action, group *proto.G
 	_, err := history.AddHistoryEntry(ctx, &proto.AddHistoryEntryRequest{
 		Entry: &proto.HistoryEntry{
 			Action: action,
-			Group:  group,
+			Target: &proto.HistoryEntry_Group{Group: group},
 		},
 		Users: users,
 	})
@@ -60,11 +60,14 @@ func checkIsGroupOwner(username string, groupId int64) (bool, error) {
 	count := 0
 
 	for i := 0; i < len(history.Entries); i++ {
-		if history.Entries[i].Group != nil && history.Entries[i].Group.Id == groupId {
-			if history.Entries[i].Action == proto.Action_CREATE {
-				count++
-			} else if history.Entries[i].Action == proto.Action_DELETE {
-				count--
+		switch x := history.Entries[i].Target.(type) {
+		case *proto.HistoryEntry_Group:
+			if x.Group.Id == groupId {
+				if history.Entries[i].Action == proto.Action_CREATE {
+					count++
+				} else if history.Entries[i].Action == proto.Action_DELETE {
+					count--
+				}
 			}
 		}
 	}
@@ -101,7 +104,7 @@ func updateEventHistory(ctx context.Context, action proto.Action, event *proto.E
 	_, err := history.AddHistoryEntry(ctx, &proto.AddHistoryEntryRequest{
 		Entry: &proto.HistoryEntry{
 			Action: action,
-			Event:  event,
+			Target: &proto.HistoryEntry_Event{Event: event},
 		},
 		Users: users,
 	})
@@ -152,11 +155,12 @@ func getUserEvents(username string) ([]proto.Event, error) {
 	entries := history.Entries
 
 	for _, entry := range entries {
-		if entry.Event != nil {
+		switch x := entry.Target.(type) {
+		case *proto.HistoryEntry_Event:
 			if entry.Action == proto.Action_DELETE {
-				delete(events, entry.Event.Id)
+				delete(events, x.Event.Id)
 			} else if entry.Action == proto.Action_CREATE {
-				events[entry.Event.Id] = *entry.Event
+				events[x.Event.Id] = *x.Event
 			}
 		}
 	}
