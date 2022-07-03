@@ -9,3 +9,4 @@ aiofiles~=0.6.0
 psutil
 cryptography
 certifi
+googleapis-common-protos

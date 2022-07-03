@@ -14,7 +14,10 @@ from store import Storage
 
 
 def get_host():
-    return random.choice(Storage.get('server', ['localhost']))
+    try:
+        return random.choice(Storage.get('server', ['localhost']))
+    except IndexError:
+        return 'localhost'
 
 
 TOKEN = 'token'
