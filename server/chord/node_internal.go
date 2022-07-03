@@ -160,6 +160,7 @@ func (node *Node) Stop() error {
 }
 
 func (node *Node) GetFile(key string) ([]byte, error) {
+	log.Infof("Getting file with key %s.", key)
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
@@ -173,6 +174,7 @@ func (node *Node) GetFile(key string) ([]byte, error) {
 }
 
 func (node *Node) SetFile(key string, value []byte) error {
+	log.Infof("Setting file %s.", key)
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()

@@ -10,8 +10,9 @@ var (
 	node *chord.Node
 )
 
-func Start(rsaPrivateKeyPath string, rsaPublicteKeyPath string, network string) {
-	node, err := chord.DefaultNode("50050")
+func Start(rsaPrivateKeyPath string, rsaPublicKeyPath string, network string) {
+	var err error
+	node, err = chord.DefaultNode("50050")
 
 	if err != nil {
 		log.Fatalf("Can't start chord node")
