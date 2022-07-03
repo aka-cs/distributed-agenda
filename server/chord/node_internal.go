@@ -139,17 +139,17 @@ func (node *Node) Stop() error {
 		// Change the successor of this node predecessor to this node successor.
 		err = node.RPC.SetSuccessor(pred, suc)
 		if err != nil {
-			message := "Error stopping server: error setting new successor of predecessor at " + pred.IP + "."
-			log.Error(message)
-			return errors.New(message + err.Error())
+			log.Errorf("Error stopping server: error setting new successor of predecessor at %s.", pred.IP)
+			return errors.New(
+				fmt.Sprintf("error stopping server: error setting new successor of predecessor at %s\n.%s",
+					pred.IP, err.Error()))
 		}
 	}
 
 	err := node.RPC.Stop() // Stop the RPC (transport layer) services.
 	if err != nil {
-		message := "Error stopping server: cannot stop the transport layer."
-		log.Error(message)
-		return errors.New(message + err.Error())
+		log.Error("Error stopping server: cannot stop the transport layer.")
+		return errors.New("error stopping server: cannot stop the transport layer\n" + err.Error())
 	}
 
 	node.server.Stop() // Stop node server.
@@ -161,7 +161,7 @@ func (node *Node) Stop() error {
 
 func (node *Node) GetFile(key string) ([]byte, error) {
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
+	ctx, cancel := context.WithTimeout(nil, node.config.Timeout)
 	defer cancel()
 
 	response, err := node.Get(ctx, &chord.GetRequest{Key: key})
@@ -174,7 +174,7 @@ func (node *Node) GetFile(key string) ([]byte, error) {
 
 func (node *Node) SetFile(key string, value []byte) error {
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
+	ctx, cancel := context.WithTimeout(nil, node.config.Timeout)
 	defer cancel()
 
 	_, err := node.Set(ctx, &chord.SetRequest{Key: key, Value: value})
@@ -184,7 +184,7 @@ func (node *Node) SetFile(key string, value []byte) error {
 
 func (node *Node) DeleteFile(key string) error {
 	// Obtain the context of the connection and set the timeout of the request.
-	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
+	ctx, cancel := context.WithTimeout(nil, node.config.Timeout)
 	defer cancel()
 
 	_, err := node.Delete(ctx, &chord.DeleteRequest{Key: key})
