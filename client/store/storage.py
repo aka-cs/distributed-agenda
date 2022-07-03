@@ -4,6 +4,8 @@ import shutil
 import aiofiles
 import streamlit as st
 
+import pickle
+
 
 class Storage:
 
@@ -29,8 +31,8 @@ class Storage:
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        with open(f'{folder_path}/{key}.txt', 'w') as f:
-            f.write(value)
+        with open(f'{folder_path}/{key}.txt', 'wb') as f:
+            f.write(pickle.dumps(value))
 
     @staticmethod
     def disk_get(key, default=None):
@@ -41,8 +43,8 @@ class Storage:
         if not os.path.exists(file_path):
             return default
 
-        with open(file_path, 'r') as f:
-            return f.read()
+        with open(file_path, 'rb') as f:
+            return pickle.loads(f.read())
 
     @staticmethod
     def disk_delete(key):
@@ -61,8 +63,8 @@ class Storage:
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        async with aiofiles.open(f'{folder_path}/{key}.txt', 'w') as f:
-            await f.write(value)
+        async with aiofiles.open(f'{folder_path}/{key}.txt', 'wb') as f:
+            await f.write(pickle.dumps(value))
 
     # same as disk_get but uses aiofiles
     @staticmethod
@@ -74,8 +76,8 @@ class Storage:
         if not os.path.exists(file_path):
             return default
 
-        async with aiofiles.open(file_path, 'r') as f:
-            return await f.read()
+        async with aiofiles.open(file_path, 'rb') as f:
+            return pickle.loads(await f.read())
 
     # same as disk_delete but uses aiofiles
     @staticmethod

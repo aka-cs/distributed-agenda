@@ -16,6 +16,14 @@ message Group{
   string description = 3;
 }
 
+message UserList{
+  repeated string Users = 1;
+}
+
+message GroupMembers{
+  map<int32, UserList> members = 1;
+}
+
 message GetGroupRequest{
   int64 id = 1;
 }

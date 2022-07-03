@@ -104,7 +104,7 @@ def discover():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.settimeout(1)
-        sock.sendto(b'Hello', (broadcast, 8830))
+        sock.sendto(b'Chord?', (broadcast, 8830))
 
         response = None
         address = None
@@ -113,7 +113,8 @@ def discover():
                 logging.info("Waiting for response")
                 response, address = sock.recvfrom(1024)
                 logging.info(f"Received {response} from {address}")
-                yield address[0]
+                if response == b"I am chord":
+                    yield address[0]
             except socket.timeout:
                 logging.info("Timeout")
                 break

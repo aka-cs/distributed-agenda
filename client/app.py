@@ -4,13 +4,14 @@ import threading
 import time
 from streamlit.scriptrunner.script_run_context import get_script_run_ctx, add_script_run_ctx
 
-from apps import home, login, get_user, groups, history  # import your app modules here
+from apps import events, login, groups, history  # import your app modules here
 from multiapp import MultiApp
-from rpc.client import update_servers
+from rpc.client import update_servers, get_user
 from rpc.history import update_history
 from store import Storage
 
-app = MultiApp(get_user())
+user = get_user()
+app = MultiApp(user)
 
 loop = asyncio.get_event_loop_policy().new_event_loop()
 
@@ -41,9 +42,10 @@ if not Storage.get('repeat'):
 
 # Add all your application here
 app.add_app("Login", login.app)
-app.add_app("Group", groups.app)
-app.add_app("Home", home.app)
-app.add_app("History", history.app)
+if user:
+    app.add_app("Group", groups.app)
+    app.add_app("Events", events.app)
+    app.add_app("History", history.app)
 
 # The main app
 loop.run_until_complete(app.run())

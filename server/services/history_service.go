@@ -25,11 +25,12 @@ func (*HistoryServer) AddHistoryEntry(_ context.Context, request *proto.AddHisto
 
 	for i := 0; i < len(users); i++ {
 		path := filepath.Join("History", users[i])
-		history, err := persistency.Load[[]proto.HistoryEntry](node, path)
+		history := &proto.History{}
+		history, err := persistency.Load(node, path, history)
 		if err != nil {
 			return &proto.AddHistoryEntryResponse{}, err
 		}
-		history = append(history, *entry)
+		history.Entries = append(history.Entries, entry)
 		err = persistency.Save(node, history, path)
 
 		if err != nil {
@@ -44,14 +45,15 @@ func (*HistoryServer) GetFullHistory(request *proto.GetFullHistoryRequest, strea
 	username := request.GetUsername()
 	path := filepath.Join("History", username)
 
-	history, err := persistency.Load[[]proto.HistoryEntry](node, path)
+	history := &proto.History{}
+	history, err := persistency.Load(node, path, history)
 	if err != nil {
 		return err
 	}
 
-	for i := 0; i < len(history); i++ {
+	for i := 0; i < len(history.Entries); i++ {
 		err = stream.Send(&proto.GetFullHistoryResponse{
-			Entry: &history[i],
+			Entry: history.Entries[i],
 		})
 
 		if err != nil {
@@ -69,14 +71,15 @@ func (*HistoryServer) GetHistoryFromOffset(request *proto.GetHistoryFromOffsetRe
 
 	path := filepath.Join("History", username)
 
-	history, err := persistency.Load[[]proto.HistoryEntry](node, path)
+	history := &proto.History{}
+	history, err := persistency.Load(node, path, history)
 	if err != nil {
 		return err
 	}
 
-	for i := offset; i < len(history); i++ {
+	for i := offset; i < len(history.Entries); i++ {
 		err = stream.Send(&proto.GetHistoryFromOffsetResponse{
-			Entry: &history[i],
+			Entry: history.Entries[i],
 		})
 
 		if err != nil {
