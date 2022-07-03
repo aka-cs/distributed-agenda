@@ -20,33 +20,33 @@ func (node *Node) Start() error {
 
 	// If node server is actually running, report error.
 	if IsOpen(node.shutdown) {
-		message := "Error starting server: this node server is actually running."
-		log.Error(message)
-		return errors.New(message)
+		log.Error("Error starting server: this node server is actually running.")
+		return errors.New("error starting server: this node server is actually running")
 	}
 
 	node.shutdown = make(chan struct{}) // Report the node server is running.
 
-	ip := GetOutboundIP()
-	node.IP = ip.String()
-	log.Infof("Node address at %s:%s.", node.IP, node.Port)
-	id, err := HashKey(node.IP+":"+node.Port, node.config.Hash) // Obtain the ID relative to this address.
+	ip := GetOutboundIP()                    // Get the IP of this node.
+	address := ip.String() + ":" + node.Port // Get the address of this node.
+	log.Infof("Node address at %s.", address)
+
+	id, err := HashKey(address, node.config.Hash) // Obtain the ID relative to this address.
 	if err != nil {
-		message := "Error starting node: cannot hash node address."
-		log.Error(message)
-		return errors.New(message + err.Error())
+		log.Error("Error starting node: cannot hash node address.")
+		return errors.New("error starting node: cannot hash node address\n" + err.Error())
 	}
-	node.ID = id
+
+	node.ID = id          // Instantiates the ID of this node.
+	node.IP = ip.String() // Instantiates the IP of this node.
 
 	// Start listening at corresponding address.
 	log.Debug("Trying to listen at corresponding address.")
-	listener, err := net.Listen("tcp", node.IP+":"+node.Port)
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		message := "Error starting server: cannot listen at the address " + node.IP + "."
-		log.Error(message)
-		return errors.New(message + err.Error())
+		log.Errorf("Error starting server: cannot listen at the address %s.", address)
+		return errors.New("error starting server: cannot listen at the address " + address + "\n" + err.Error())
 	}
-	log.Debug("Listening at " + node.IP + ".")
+	log.Infof("Listening at %s.", address)
 
 	node.successors = NewQueue[chord.Node](node.config.StabilizingNodes) // Create the successors queue.
 	node.successors.PushBack(node.Node)                                  // Set this node as its own successor.
@@ -61,28 +61,28 @@ func (node *Node) Start() error {
 
 	err = node.RPC.Start() // Start the RPC (transport layer) services.
 	if err != nil {
-		message := "Error starting server: cannot start the transport layer."
-		log.Error(message)
-		return errors.New(message + err.Error())
+		log.Error("Error starting server: cannot start the transport layer.")
+		return errors.New("error starting server: cannot start the transport layer\n" + err.Error())
 	}
 
 	// Start serving at the opened socket.
 	go node.Listen()
 
-	discovered, err := node.NetDiscover(ip)
+	discovered, err := node.NetDiscover(ip) // Discover the chord net, if exists.
 	if err != nil {
-		message := "Error starting server: cannot discover net to connect."
-		log.Error(message)
-		return errors.New(message + err.Error())
+		log.Error("Error starting server: cannot discover net to connect.")
+		return errors.New("error starting server: cannot discover net to connect\n" + err.Error())
 	}
+
+	// If there is a chord net already.
 	if discovered != "" {
-		err = node.Join(&chord.Node{IP: discovered, Port: node.Port})
+		err = node.Join(&chord.Node{IP: discovered, Port: node.Port}) // Join to the discovered node.
 		if err != nil {
-			message := "Error joining to server."
-			log.Error(message)
-			return errors.New(message + err.Error())
+			log.Error("Error joining to chord net server.")
+			return errors.New("error joining to chord net server.\n" + err.Error())
 		}
 	} else {
+		// Otherwise, create one.
 		log.Info("Creating chord ring.")
 	}
 
@@ -109,9 +109,8 @@ func (node *Node) Stop() error {
 
 	// If node server is not actually running, report error.
 	if !IsOpen(node.shutdown) {
-		message := "Error stopping server: this node server is actually shutdown."
-		log.Error(message)
-		return errors.New(message)
+		log.Error("Error stopping server: this node server is actually shutdown.")
+		return errors.New("error stopping server: this node server is actually shutdown")
 	}
 
 	// Lock the successor to read it, and unlock it after.
