@@ -5,6 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"hash"
 	"math/big"
+	"net"
 	"server/chord/chord"
 )
 
@@ -26,8 +27,27 @@ func IsOpen[T any](channel <-chan T) bool {
 	}
 }
 
-func Keys[T comparable, K any](dictionary map[T]K) []T {
-	keys := make([]T, 0)
+// GetOutboundIP get the IP of this host in the net.
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+
+		}
+	}(conn)
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
+}
+
+func Keys(dictionary map[string][]byte) []string {
+	keys := make([]string, 0)
 
 	for key := range dictionary {
 		keys = append(keys, key)

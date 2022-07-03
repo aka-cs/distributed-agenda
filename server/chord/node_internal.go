@@ -351,8 +351,8 @@ func (node *Node) AbsorbPredecessorKeys(old *chord.Node) {
 			}
 
 			log.Debug("Transferring old predecessor keys to the successor.")
-			log.Debugf("Keys to transfer: %s", out)
-			log.Debugf("Remaining keys: %s", in)
+			log.Debugf("Keys to transfer: %s", Keys(out))
+			log.Debugf("Remaining keys: %s", Keys(in))
 
 			// Transfer the keys to this node successor.
 			err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: out})
@@ -366,8 +366,8 @@ func (node *Node) AbsorbPredecessorKeys(old *chord.Node) {
 }
 
 // DeletePredecessorKeys deletes the old predecessor replicated keys on this node.
-// Return the actual replicated keys, and the deleted keys.
-func (node *Node) DeletePredecessorKeys(old *chord.Node) (map[string][]byte, map[string][]byte, error) {
+// Return the actual keys, the actual replicated keys, and the deleted keys.
+func (node *Node) DeletePredecessorKeys(old *chord.Node) (map[string][]byte, map[string][]byte, map[string][]byte, error) {
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.Lock()
 	pred := node.predecessor
@@ -380,36 +380,31 @@ func (node *Node) DeletePredecessorKeys(old *chord.Node) (map[string][]byte, map
 	in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the keys to transfer.
 	if err != nil {
 		log.Error("Error obtaining the new predecessor corresponding keys.")
-		return nil, nil, errors.New("error obtaining the new predecessor corresponding keys\n" + err.Error())
+		return nil, nil, nil, errors.New("error obtaining the new predecessor corresponding keys\n" + err.Error())
 	}
-
-	log.Debug("Transferring old predecessor keys to the successor.")
-	log.Debugf("Keys to transfer: %s", out)
-	log.Debugf("Remaining keys: %s", in)
 
 	// If the old predecessor is not this node, delete the old predecessor keys on this node.
 	if !Equals(old.ID, node.ID) {
 		_, deleted, err := node.dictionary.Partition(old.ID, node.ID) // Obtain the keys to delete.
 		if err != nil {
 			log.Error("Error obtaining old predecessor keys replicated on this node.")
-			return nil, nil, errors.New("error obtaining old predecessor keys replicated on this node\n" + err.Error())
+			return nil, nil, nil, errors.New(
+				"error obtaining old predecessor keys replicated on this node\n" + err.Error())
 		}
-
-		log.Debugf("Keys to delete: %s", deleted)
 
 		err = node.dictionary.Discard(Keys(out)) // Delete the keys of the old predecessor.
 		if err != nil {
-			message := "Error deleting old predecessor keys on this node."
-			log.Error(message)
-			return nil, nil, errors.New(message + "\n" + err.Error())
+			log.Error("Error deleting old predecessor keys on this node.")
+			return nil, nil, nil, errors.New("error deleting old predecessor keys on this node\n" + err.Error())
 		}
 
 		log.Debug("Successful delete of old predecessor replicated keys in this node.")
-		return out, deleted, nil
+		return in, out, deleted, nil
 	}
-	return out, nil, nil
+	return in, out, nil, nil
 }
 
+// UpdatePredecessorKeys updates the new predecessor with its corresponding keys.
 func (node *Node) UpdatePredecessorKeys(old *chord.Node) {
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.Lock()
@@ -421,22 +416,28 @@ func (node *Node) UpdatePredecessorKeys(old *chord.Node) {
 	suc := node.successors.Beg()
 	node.sucLock.Unlock()
 
+	// If the new predecessor is not this node.
 	if !Equals(pred.ID, node.ID) {
 		// Transfer the corresponding keys to the new predecessor.
-		transferred, deleted, err := node.DeletePredecessorKeys(old)
+		in, out, deleted, err := node.DeletePredecessorKeys(old)
 		if err != nil {
 			log.Errorf("Error updating new predecessor keys.\n%s", err.Error())
 			return
 		}
 
+		log.Debug("Transferring old predecessor keys to the successor.")
+		log.Debugf("Keys to transfer: %s", Keys(out))
+		log.Debugf("Remaining keys: %s", Keys(in))
+		log.Debugf("Keys to delete: %s", Keys(deleted))
+
 		// Build the new predecessor dictionary, by transferring its correspondent keys.
-		err = node.RPC.Extend(pred, &chord.ExtendRequest{Dictionary: transferred})
+		err = node.RPC.Extend(pred, &chord.ExtendRequest{Dictionary: out})
 		if err != nil {
 			log.Errorf("Error transferring keys to the new predecessor.\n%s", err.Error())
 			// If there are deleted keys, reinsert the keys on this node storage,
 			// to prevent the loss of information.
 			if deleted != nil {
-				// Lock the dictionary to read and write on it, and unlock it after.
+				// Lock the dictionary to write on it, and unlock it after.
 				node.dictLock.Lock()
 				err = node.dictionary.Extend(deleted)
 				node.dictLock.Unlock()
@@ -451,7 +452,7 @@ func (node *Node) UpdatePredecessorKeys(old *chord.Node) {
 		// If successor exists, and it's different from the new predecessor, delete the transferred keys
 		// from successor storage replication.
 		if !Equals(suc.ID, node.ID) && !Equals(suc.ID, pred.ID) {
-			err = node.RPC.Discard(suc, &chord.DiscardRequest{Keys: Keys(transferred)})
+			err = node.RPC.Discard(suc, &chord.DiscardRequest{Keys: Keys(out)})
 			if err != nil {
 				log.Errorf("Error deleting replicated keys on the successor at %s.\n%s", suc.IP, err.Error())
 				// If there are deleted keys, reinsert the keys on this node storage,
@@ -472,6 +473,7 @@ func (node *Node) UpdatePredecessorKeys(old *chord.Node) {
 	}
 }
 
+// UpdateSuccessorKeys updates the new successor replicated keys with this node keys.
 func (node *Node) UpdateSuccessorKeys() {
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
@@ -483,6 +485,7 @@ func (node *Node) UpdateSuccessorKeys() {
 	suc := node.successors.Beg()
 	node.sucLock.Unlock()
 
+	// If successor is not this node.
 	if !Equals(suc.ID, node.ID) {
 		// Lock the dictionary to read it, and unlock it after.
 		node.dictLock.RLock()
@@ -494,8 +497,8 @@ func (node *Node) UpdateSuccessorKeys() {
 		}
 
 		log.Debug("Transferring this node keys to the successor.")
-		log.Debugf("Keys to transfer: %s", out)
-		log.Debugf("Remaining keys: %s", in)
+		log.Debugf("Keys to transfer: %s", Keys(out))
+		log.Debugf("Remaining keys: %s", Keys(in))
 
 		// Transfer this node keys to the new successor, to update it.
 		err = node.RPC.Extend(suc, &chord.ExtendRequest{Dictionary: in})
@@ -507,96 +510,109 @@ func (node *Node) UpdateSuccessorKeys() {
 	}
 }
 
+// BroadListen listen for broadcast messages.
 func (node *Node) BroadListen() {
+	// Wait for the specific port to be free to use.
 	pc, err := net.ListenPacket("udp4", ":8830")
 	for err != nil {
 		pc, err = net.ListenPacket("udp4", ":8830")
 	}
+	// Close the listening socket at the end of function.
+	defer func(pc net.PacketConn) {
+		err := pc.Close()
+		if err != nil {
+			return
+		}
+	}(pc)
 
+	// Start listening messages.
 	for {
+		// If node server is shutdown, return.
 		if !IsOpen(node.shutdown) {
-			err = pc.Close()
-			if err != nil {
-				return
-			}
 			return
 		}
 
+		// Create the buffer to store the message.
 		buf := make([]byte, 1024)
-		n, addr, err := pc.ReadFrom(buf)
+		// Wait for a message.
+		n, address, err := pc.ReadFrom(buf)
 		if err != nil {
+			log.Errorf("Incoming broadcast message error.\n%s", err.Error())
 			continue
 		}
 
-		log.Trace("%s sent this: %s", addr, buf[:n])
+		log.Debugf("Incoming broadcast message. %s sent this: %s", address, buf[:n])
 
-		if string(buf[:n]) == "Hello" {
-			_, err = pc.WriteTo([]byte("Hello from the other side"), addr)
+		// If the incoming message is the specified one, answer with the specific response.
+		if string(buf[:n]) == "Chord?" {
+			_, err = pc.WriteTo([]byte("I am chord"), address)
 			if err != nil {
+				log.Errorf("Error responding broadcast message.\n%s", err.Error())
 				continue
 			}
 		}
 	}
 }
 
+// NetDiscover discover a chord ring net if exists.
 func (node *Node) NetDiscover(ip net.IP) (string, error) {
+	// Specify the broadcast address.
 	ip[3] = 255
 	broadcast := ip.String() + ":8830"
 
+	// Try to listen at the specific port to use.
 	pc, err := net.ListenPacket("udp4", ":8830")
 	if err != nil {
+		log.Errorf("Error listen at the address %s.", broadcast)
 		return "", err
 	}
 
+	// Resolve the address to broadcast.
 	out, err := net.ResolveUDPAddr("udp4", broadcast)
 	if err != nil {
+		log.Errorf("Error resolving broadcast address %s.", broadcast)
 		return "", err
 	}
 
-	log.Info("UPD address resolved.")
+	log.Info("UPD broadcast address resolved.")
 
-	_, err = pc.WriteTo([]byte("Hello"), out)
+	// Send the message.
+	_, err = pc.WriteTo([]byte("Chord?"), out)
 	if err != nil {
+		log.Errorf("Error sending broadcast message at address %s.", broadcast)
 		return "", err
 	}
 
 	log.Info("Message broadcast done.")
-
-	buf := make([]byte, 1024)
-	err = pc.SetReadDeadline(time.Now().Add(10 * time.Second))
-	if err != nil {
-		return "", err
-	}
+	top := time.Now().Add(30 * time.Second)
 
 	log.Info("Waiting for response.")
 
-	for i := 0; i < 10; i++ {
-		n, address, err := pc.ReadFrom(buf)
+	for top.After(time.Now()) {
+		// Create the buffer to store the message.
+		buf := make([]byte, 1024)
 
-		if err == nil && string(buf[:n]) == "Hello from the other side" {
-			log.Infof("%s sent this: %s", address, buf[:n])
+		// Set the deadline to wait for incoming messages.
+		err = pc.SetReadDeadline(time.Now().Add(10 * time.Second))
+		if err != nil {
+			log.Error("Error setting deadline for incoming messages.")
+			return "", err
+		}
+
+		// Wait for a message.
+		n, address, err := pc.ReadFrom(buf)
+		if err != nil {
+			log.Errorf("Error reading incoming message.\n%s", err.Error())
+			continue
+		}
+
+		log.Debugf("Incoming broadcast message. %s sent this: %s", address, buf[:n])
+
+		if string(buf[:n]) == "I am chord" {
 			return strings.Split(address.String(), ":")[0], nil
 		}
 	}
 
 	log.Info("Deadline for response exceed.")
 	return "", nil
-}
-
-func GetOutboundIP() net.IP {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-
-		}
-	}(conn)
-
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-
-	return localAddr.IP
 }
