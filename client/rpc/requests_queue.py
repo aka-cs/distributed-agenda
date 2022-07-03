@@ -1,5 +1,8 @@
 import dataclasses
+import logging
 from typing import List
+
+import grpclib.exceptions
 
 from rpc import services
 from rpc.client import Channel
@@ -31,18 +34,29 @@ def remove_request(request: Request):
     try:
         requests.remove(request)
     except ValueError:
-        return
+        pass
+    try:
+        Storage.get('conflicts', []).remove(request)
+    except ValueError:
+        pass
     Storage.disk_store('requests', requests)
 
 
 def clear_requests():
     Storage.disk_store('requests', [])
+    Storage.store('conflicts', [])
 
 
 async def process_requests():
     requests = get_requests()
+    logging.info(f"Processing requests: {requests}")
     processed = []
+    conflicts = Storage.get('conflicts', [])
     for request in requests:
+        logging.info(f"Pushing request: {request}")
+        if request in conflicts:
+            continue
+        response = None
         try:
             match request.service:
                 case services.EVENT:
@@ -50,7 +64,13 @@ async def process_requests():
                         stub = EventsServiceStub(channel)
                         match request.request:
                             case CreateEventRequest():
-                                response = await stub.CreateEvent(request.request)
+                                try:
+                                    response = await stub.CreateEvent(request.request)
+                                except grpclib.exceptions.GRPCError as err:
+                                    if err.status == grpclib.const.Status.UNAVAILABLE:
+                                        logging.info("Event is in conflict, adding to conflicts")
+                                        conflicts.append(request)
+                                    raise err
                             case ConfirmEventRequest():
                                 response = await stub.ConfirmEvent(request.request)
                             case RejectEventRequest():
@@ -62,3 +82,5 @@ async def process_requests():
 
     for req in processed:
         remove_request(req)
+
+    Storage.store('conflicts', conflicts)

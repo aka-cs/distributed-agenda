@@ -23,31 +23,38 @@ async def app():
         st.write('-' * 100)
         st.title(f'Group: {group.name}')
         st.write(group.description)
-        users, admins = await get_group_users(group.id)
-        users.sort(key=lambda x: x.username)
-        st.write('Participants:')
+        users, admins = [], []
+        try:
+            users, admins = await get_group_users(group.id)
+        except BaseException as err:
+            logging.error(f"There was an error loading group participants: {err}")
+        if users:
+            users.sort(key=lambda x: x.username)
+            st.write('Participants:')
 
-        col_name, col_action = st.columns([1, 1])
-        for i, user in enumerate(users):
-            with col_name:
-                st.write(user.username)
-            if not owner.get(group.id):
-                continue
-            with col_action:
-                if user.username == current_user['sub']:
-                    st.write('This is you')
+            col_name, col_action = st.columns([1, 1])
+            for i, user in enumerate(users):
+                with col_name:
+                    st.write(user.username)
+                if not owner.get(group.id):
                     continue
-                rm_btn = st.button('Remove', key=f'remove_{i}')
-                if rm_btn:
-                    await st_remove_user(group.id, user.username)
-                    st.experimental_rerun()
+                with col_action:
+                    if user.username == current_user['sub']:
+                        st.write('This is you')
+                        continue
+                    rm_btn = st.button('Remove', key=f'remove_{i}')
+                    if rm_btn:
+                        await st_remove_user(group.id, user.username)
+                        st.experimental_rerun()
 
-        if owner.get(group.id) or not any(admins):
-            st.text_input(label='Add new participant', key='add_user')
-            add_btn = st.button('Add')
-            if add_btn:
-                await st_add_user(group.id)
-                st.experimental_rerun()
+            if owner.get(group.id) or not any(admins):
+                st.text_input(label='Add new participant', key='add_user')
+                add_btn = st.button('Add')
+                if add_btn:
+                    await st_add_user(group.id)
+                    st.experimental_rerun()
+        else:
+            st.write('Participants could not be loaded')
 
     st.write('-' * 100)
     st.title('New Group')

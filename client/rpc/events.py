@@ -1,5 +1,7 @@
 from typing import Optional, List
 
+import grpclib.exceptions
+
 from proto.history_pb2 import Action
 from rpc import services
 from rpc.client import Channel
@@ -13,7 +15,7 @@ from rpc.requests_queue import add_request, Request, get_requests
 
 
 async def create_event(start: Timestamp, end: Timestamp, name: str, description: str, group_id=0)\
-        -> Optional[proto.events_pb2.CreateEventResponse]:
+        -> int:
 
     event = proto.events_pb2.Event(start=start, end=end, name=name, description=description, groupId=group_id)
     create_event_request = proto.events_pb2.CreateEventRequest(event=event)
@@ -22,11 +24,14 @@ async def create_event(start: Timestamp, end: Timestamp, name: str, description:
         async with Channel(services.EVENT) as channel:
             stub = proto.events_grpc.EventsServiceStub(channel)
             response = await stub.CreateEvent(create_event_request)
+    except grpclib.exceptions.GRPCError as err:
+        if err.status == grpclib.const.Status.UNAVAILABLE:
+            return 2
     except:
         add_request(Request(create_event_request, services.EVENT))
-        return None
+        return 1
 
-    return response
+    return 0
 
 
 async def get_user_events():
@@ -53,18 +58,18 @@ async def get_user_events():
                 del drafts[entry.event.id]
 
     local = get_requests()
-    create: List[proto.events_pb2.CreateEventRequest] = [r for r in local if isinstance(r, proto.events_pb2.CreateEventRequest)]
+    create: List[proto.events_pb2.CreateEventRequest] = [r.request for r in local if isinstance(r.request, proto.events_pb2.CreateEventRequest)]
 
     for event in create:
         events[event.event.id] = event.event
 
-    reject: List[proto.events_pb2.RejectEventRequest] = [r for r in local if isinstance(r, proto.events_pb2.RejectEventRequest)]
+    reject: List[proto.events_pb2.RejectEventRequest] = [r.request for r in local if isinstance(r.request, proto.events_pb2.RejectEventRequest)]
 
     for event in reject:
         del events[event.eventId]
         del drafts[event.eventId]
 
-    confirmed: List[proto.events_pb2.ConfirmEventRequest] = [r for r in local if isinstance(r, proto.events_pb2.ConfirmEventRequest)]
+    confirmed: List[proto.events_pb2.ConfirmEventRequest] = [r.request for r in local if isinstance(r.request, proto.events_pb2.ConfirmEventRequest)]
 
     for event in confirmed:
         del drafts[event.eventId]

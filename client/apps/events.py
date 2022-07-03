@@ -48,9 +48,14 @@ async def app():
             end = datetime.datetime.combine(event_end_date, event_end_time)
             event_start = Timestamp(seconds=int(start.timestamp()))
             event_end = Timestamp(seconds=int(end.timestamp()))
-            await create_event(name=event_name, description=event_description, start=event_start, end=event_end)
-            st.success('Event created successfully')
-            await update_history()
+            response = await create_event(name=event_name, description=event_description, start=event_start, end=event_end)
+            if response == 0:
+                st.success('Event created successfully')
+                await update_history()
+            if response == 1:
+                st.warning('Event stored locally, check your connection')
+            if response == 2:
+                st.error('Event breaks someone schedule')
 
 
 
