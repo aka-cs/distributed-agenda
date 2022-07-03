@@ -42,9 +42,8 @@ type Node struct {
 func NewNode(port string, configuration *Configuration, transport RemoteServices, storage Storage) (*Node, error) {
 	// If configuration is null, report error.
 	if configuration == nil {
-		message := "Error creating node: configuration cannot be null."
-		log.Error(message)
-		return nil, errors.New(message)
+		log.Error("Error creating node: configuration cannot be null.")
+		return nil, errors.New("error creating node: configuration cannot be null")
 	}
 
 	// Creates the new node with the obtained ID and same address.
