@@ -85,7 +85,7 @@ func (*AuthServer) SignUp(_ context.Context, request *proto.SignUpRequest) (*pro
 	return &proto.SignUpResponse{}, nil
 }
 
-func StartAuthServer(rsaPrivateKey string, network string, address string) {
+func StartAuthServer(network string, address string) {
 	log.Infof("Auth service started")
 
 	lis, err := net.Listen(network, address)
@@ -94,7 +94,7 @@ func StartAuthServer(rsaPrivateKey string, network string, address string) {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	key, err := ioutil.ReadFile(rsaPrivateKey)
+	key, err := ioutil.ReadFile(rsaPrivate)
 	if err != nil {
 		log.Fatalf("Error reading the jwt private key: %v", err)
 	}
@@ -142,7 +142,7 @@ func ValidateRequest(ctx context.Context) (*jwt.Token, error) {
 		err   error
 	)
 
-	key, err := ioutil.ReadFile("pub.pem")
+	key, err := ioutil.ReadFile(rsaPublic)
 
 	if err != nil {
 		log.Fatalf("Error reading the jwt public key: %v", err)

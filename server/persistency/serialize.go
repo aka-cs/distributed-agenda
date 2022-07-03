@@ -37,7 +37,7 @@ func Save[T any](node *chord.Node, object T, path string) error {
 		return status.Error(codes.Internal, "Error saving data")
 	}
 
-	err = node.SetFile(fullPath, buffer.Bytes())
+	err = node.SetKey(fullPath, buffer.Bytes())
 
 	if err != nil {
 		log.Errorf("Error saving file")
@@ -58,7 +58,7 @@ func Load[T any](node *chord.Node, path string) (T, error) {
 
 	var buffer bytes.Buffer
 
-	data, err := node.GetFile(fullPath)
+	data, err := node.GetKey(fullPath)
 
 	if err != nil {
 		log.Errorf("Error getting file: %v", err)
@@ -83,7 +83,7 @@ func Load[T any](node *chord.Node, path string) (T, error) {
 func Delete(node *chord.Node, path string) error {
 	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
 
-	err := node.DeleteFile(fullPath)
+	err := node.DeleteKey(fullPath)
 
 	if err != nil {
 		log.Errorf("Error deleting file: %v", err)
@@ -97,7 +97,7 @@ func FileExists(node *chord.Node, path string) bool {
 
 	log.Debugf("Checking if file exists: %s", fullPath)
 
-	if _, err := node.GetFile(fullPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := node.GetKey(fullPath); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	log.Debugf("File already exists: %v", fullPath)

@@ -53,7 +53,12 @@ func (*EventsServer) CreateEvent(ctx context.Context, request *proto.CreateEvent
 
 	groupId := request.GetEvent().GetGroupId()
 
-	if group, err := persistency.Load[proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupId, 10))); err != nil {
+	if groupId != 0 {
+		group, err := persistency.Load[proto.Group](node, filepath.Join("Group", strconv.FormatInt(groupId, 10)))
+
+		if err != nil {
+			return &proto.CreateEventResponse{}, err
+		}
 		usernames, err := getGroupUsernames(&group)
 
 		if err != nil {
