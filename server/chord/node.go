@@ -253,7 +253,7 @@ func (node *Node) Notify(ctx context.Context, new *chord.Node) (*chord.EmptyResp
 		node.sucLock.RUnlock()
 
 		// If successor exists, delete the transferred keys from successor storage replication.
-		if !Equals(suc.ID, node.ID) {
+		if !Equals(suc.ID, node.ID) && !Equals(suc.ID, pred.ID) {
 			err = node.RPC.Discard(suc, &chord.DiscardRequest{Keys: Keys(out)})
 			if err != nil {
 				message := "Error deleting replicated keys on the successor at " + new.IP + ".\n"

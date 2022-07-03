@@ -253,7 +253,7 @@ func (node *Node) LocateKey(key string) (*chord.Node, error) {
 
 	id, err := HashKey(key, node.config.Hash) // Obtain the ID relative to this key.
 	if err != nil {
-		message := "Error locating key.\n"
+		message := "Error locating key " + key + ".\n"
 		log.Error(message)
 		return nil, errors.New(message + err.Error())
 	}
