@@ -130,9 +130,10 @@ func (node *Node) Stop() error {
 		// Change the predecessor of this node successor to this node predecessor.
 		err := node.RPC.SetPredecessor(suc, pred)
 		if err != nil {
-			message := "Error stopping server: error setting new predecessor of successor at " + suc.IP + "."
-			log.Error(message)
-			return errors.New(message + err.Error())
+			log.Errorf("Error stopping server: error setting new predecessor of successor at %s.", suc.IP)
+			return errors.New(
+				fmt.Sprintf("error stopping server: error setting new predecessor of successor at %s\n.%s",
+					suc.IP, err.Error()))
 		}
 
 		// Change the successor of this node predecessor to this node successor.
@@ -165,10 +166,10 @@ func (node *Node) GetFile(key string) ([]byte, error) {
 
 	response, err := node.Get(ctx, &chord.GetRequest{Key: key})
 	if err != nil {
-		return response.Value, nil
+		return nil, err
 	}
 
-	return nil, err
+	return response.Value, nil
 }
 
 func (node *Node) SetFile(key string, value []byte) error {
