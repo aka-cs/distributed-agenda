@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	node chord.Node
+	node *chord.Node
 )
 
 func Start(rsaPrivateKeyPath string, rsaPublicteKeyPath string, network string) {
@@ -28,8 +28,4 @@ func Start(rsaPrivateKeyPath string, rsaPublicteKeyPath string, network string) 
 	go StartAuthServer(rsaPrivateKeyPath, network, "0.0.0.0:50054")
 	go StartHistoryService(network, "0.0.0.0:50055")
 	go StartUserService(network, "0.0.0.0:50051")
-
-	for {
-
-	}
 }

@@ -2,14 +2,15 @@ package chord
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 	"math/big"
 	"net"
 	"os"
 	"server/chord/chord"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 // Node represents a Chord ring single node.
