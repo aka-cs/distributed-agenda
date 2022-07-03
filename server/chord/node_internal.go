@@ -159,10 +159,13 @@ func (node *Node) Stop() error {
 	return nil
 }
 
-func (node *Node) GetFile(key string) ([]byte, error) {
+// GetKey gets the value associated to a key.
+func (node *Node) GetKey(key string) ([]byte, error) {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
+
+	log.Info("Resolving get request.")
 
 	response, err := node.Get(ctx, &chord.GetRequest{Key: key})
 	if err != nil {
@@ -172,20 +175,26 @@ func (node *Node) GetFile(key string) ([]byte, error) {
 	return response.Value, nil
 }
 
-func (node *Node) SetFile(key string, value []byte) error {
+// SetKey sets a <key, value> pair on storage.
+func (node *Node) SetKey(key string, value []byte) error {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
+
+	log.Info("Resolving set request.")
 
 	_, err := node.Set(ctx, &chord.SetRequest{Key: key, Value: value})
 
 	return err
 }
 
-func (node *Node) DeleteFile(key string) error {
+// DeleteKey deletes a <key, value> pair from storage.
+func (node *Node) DeleteKey(key string) error {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
+
+	log.Info("Resolving delete request.")
 
 	_, err := node.Delete(ctx, &chord.DeleteRequest{Key: key})
 
@@ -197,7 +206,7 @@ func (node *Node) Listen() {
 	log.Info("Starting to serve at the opened socket.")
 	err := node.server.Serve(node.sock)
 	if err != nil {
-		log.Error("Cannot serve at " + node.IP + "." + err.Error() + "")
+		log.Errorf("Cannot serve at %s.\n%s", node.IP, err.Error())
 		return
 	}
 }
@@ -213,31 +222,28 @@ func (node *Node) Join(knownNode *chord.Node) error {
 	// If the known node is null, return error: to join this node to the ring,
 	// at least one node of the ring must be known.
 	if knownNode == nil {
-		message := "Error joining to chord ring: known node cannot be null."
-		log.Error(message)
-		return errors.New(message)
+		log.Error("Error joining to chord ring: known node cannot be null.")
+		return errors.New("error joining to chord ring: known node cannot be null")
 	}
 
-	log.Info("Known node address: " + knownNode.IP + ".")
+	log.Infof("Known node address: %s.", knownNode.IP)
 
 	suc, err := node.RPC.FindSuccessor(knownNode, node.ID) // Find the immediate successor of this node ID.
 	if err != nil {
-		message := "Error joining to chord ring: cannot find successor of this node ID."
-		log.Error(message + err.Error() + "")
-		return errors.New(message + err.Error())
+		log.Error("Error joining to chord ring: cannot find successor of this node ID.")
+		return errors.New("error joining to chord ring: cannot find successor of this node ID\n" + err.Error())
 	}
 	// If the obtained node ID is this node ID, then this node is already on the ring.
 	if Equals(suc.ID, node.ID) {
-		message := "Error joining to chord ring: a node with this ID already exists."
-		log.Error(message)
-		return errors.New(message)
+		log.Error("Error joining to chord ring: a node with this ID already exists.")
+		return errors.New("error joining to chord ring: a node with this ID already exists")
 	}
 
 	// Lock the successor to write on it, and unlock it after.
 	node.sucLock.Lock()
 	node.successors.PushBeg(suc) // Update this node successor with the obtained node.
 	node.sucLock.Unlock()
-	log.Info("Successful join. Successor node at " + suc.IP + ".")
+	log.Infof("Successful join. Successor node at %s.", suc.IP)
 	return nil
 }
 
@@ -251,9 +257,8 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 
 	// If ID is null, report error.
 	if id == nil {
-		message := "Error finding successor: ID cannot be null."
-		log.Error(message)
-		return nil, errors.New(message)
+		log.Error("Error finding successor: ID cannot be null.")
+		return nil, errors.New("error finding successor: ID cannot be null")
 	}
 
 	// Find the closest finger, on this finger table, with ID less than this ID.
@@ -272,9 +277,9 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 	// from the remote node obtained.
 	suc, err := node.RPC.FindSuccessor(pred, id)
 	if err != nil {
-		message := "Error finding ID successor from finger at " + pred.IP + "."
-		log.Error(message + err.Error() + "")
-		return nil, errors.New(message + err.Error())
+		log.Errorf("Error finding ID successor from finger at %s.", pred.IP)
+		return nil, errors.New(
+			fmt.Sprintf("error finding ID successor from finger at %s.\n%s", pred.IP, err.Error()))
 	}
 	// Return the obtained successor.
 	log.Trace("ID successor found.")
@@ -285,20 +290,18 @@ func (node *Node) FindIDSuccessor(id []byte) (*chord.Node, error) {
 // To locate it, hash the given key to obtain the corresponding ID. Then look for the immediate
 // successor of this ID in the ring, since this is the node to which the key corresponds.
 func (node *Node) LocateKey(key string) (*chord.Node, error) {
-	log.Trace("Locating key: " + key + ".")
+	log.Tracef("Locating key: %s.", key)
 
 	id, err := HashKey(key, node.config.Hash) // Obtain the ID relative to this key.
 	if err != nil {
-		message := "Error locating key " + key + "."
-		log.Error(message)
-		return nil, errors.New(message + err.Error())
+		log.Errorf("Error locating key: %s.", key)
+		return nil, errors.New(fmt.Sprintf("error locating key: %s.\n%s", key, err.Error()))
 	}
 
 	suc, err := node.FindIDSuccessor(id) // Find and return the successor of this ID.
 	if err != nil {
-		message := "Error locating key."
-		log.Error(message)
-		return nil, errors.New(message + err.Error())
+		log.Errorf("Error locating key: %s.", key)
+		return nil, errors.New(fmt.Sprintf("error locating key: %s.\n%s", key, err.Error()))
 	}
 
 	log.Trace("Successful key location.")
@@ -326,6 +329,7 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 	return node.Node
 }
 
+// AbsorbPredecessorKeys absorbs the old predecessor replicated keys on this node.
 func (node *Node) AbsorbPredecessorKeys(old *chord.Node) {
 	if !Equals(old.ID, node.ID) {
 		log.Debug("Absorbing predecessor's keys.")
@@ -361,6 +365,8 @@ func (node *Node) AbsorbPredecessorKeys(old *chord.Node) {
 	}
 }
 
+// DeletePredecessorKeys deletes the old predecessor replicated keys on this node.
+// Return the actual replicated keys, and the deleted keys.
 func (node *Node) DeletePredecessorKeys(old *chord.Node) (map[string][]byte, map[string][]byte, error) {
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.Lock()
@@ -373,9 +379,8 @@ func (node *Node) DeletePredecessorKeys(old *chord.Node) (map[string][]byte, map
 
 	in, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the keys to transfer.
 	if err != nil {
-		message := "Error obtaining the new predecessor corresponding keys."
-		log.Error(message)
-		return nil, nil, errors.New(message + "\n" + err.Error())
+		log.Error("Error obtaining the new predecessor corresponding keys.")
+		return nil, nil, errors.New("error obtaining the new predecessor corresponding keys\n" + err.Error())
 	}
 
 	log.Debug("Transferring old predecessor keys to the successor.")
@@ -386,9 +391,8 @@ func (node *Node) DeletePredecessorKeys(old *chord.Node) (map[string][]byte, map
 	if !Equals(old.ID, node.ID) {
 		_, deleted, err := node.dictionary.Partition(old.ID, node.ID) // Obtain the keys to delete.
 		if err != nil {
-			message := "Error obtaining old predecessor keys replicated on this node."
-			log.Error(message)
-			return nil, nil, errors.New(message + "\n" + err.Error())
+			log.Error("Error obtaining old predecessor keys replicated on this node.")
+			return nil, nil, errors.New("error obtaining old predecessor keys replicated on this node\n" + err.Error())
 		}
 
 		log.Debugf("Keys to delete: %s", deleted)
@@ -526,9 +530,11 @@ func (node *Node) BroadListen() {
 
 		log.Trace("%s sent this: %s", addr, buf[:n])
 
-		_, err = pc.WriteTo([]byte("Hello"), addr)
-		if err != nil {
-			continue
+		if string(buf[:n]) == "Hello" {
+			_, err = pc.WriteTo([]byte("Hello from the other side"), addr)
+			if err != nil {
+				continue
+			}
 		}
 	}
 }
@@ -549,7 +555,7 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 
 	log.Info("UPD address resolved.")
 
-	_, err = pc.WriteTo([]byte("AAAAAAAAAA"), out)
+	_, err = pc.WriteTo([]byte("Hello"), out)
 	if err != nil {
 		return "", err
 	}
@@ -564,10 +570,10 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 
 	log.Info("Waiting for response.")
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 10; i++ {
 		n, address, err := pc.ReadFrom(buf)
 
-		if err == nil && node.IP+":8830" != address.String() {
+		if err == nil && string(buf[:n]) == "Hello from the other side" {
 			log.Infof("%s sent this: %s", address, buf[:n])
 			return strings.Split(address.String(), ":")[0], nil
 		}
