@@ -154,11 +154,8 @@ func IP() net.IP {
 
 func Test() {
 	log.Info("Test version: " + strconv.Itoa(50) + "\n")
-	conf := DefaultConfig()
-	transport := NewGRPCServices(conf)
-	dictionary := NewDictionary(conf.Hash)
 
-	node, err := NewNode("3333", conf, transport, dictionary)
+	node, err := DefaultNode("50050")
 	if err != nil {
 		log.Fatal("Error creating node")
 	}

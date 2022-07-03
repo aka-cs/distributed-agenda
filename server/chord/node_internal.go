@@ -2,6 +2,7 @@ package chord
 
 import (
 	"errors"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -44,7 +45,8 @@ func (node *Node) Start() error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Errorf("Error starting server: cannot listen at the address %s.", address)
-		return errors.New("error starting server: cannot listen at the address " + address + "\n" + err.Error())
+		return errors.New(
+			fmt.Sprintf("error starting server: cannot listen at the address %s\n%s", address, err.Error()))
 	}
 	log.Infof("Listening at %s.", address)
 
@@ -162,8 +164,11 @@ func (node *Node) GetFile(key string) ([]byte, error) {
 	defer cancel()
 
 	response, err := node.Get(ctx, &chord.GetRequest{Key: key})
+	if err != nil {
+		return response.Value, nil
+	}
 
-	return response.Value, err
+	return nil, err
 }
 
 func (node *Node) SetFile(key string, value []byte) error {
