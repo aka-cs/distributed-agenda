@@ -3,6 +3,7 @@ package chord
 import (
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"net"
 	"server/chord/chord"
@@ -154,6 +155,36 @@ func (node *Node) Stop() error {
 	close(node.shutdown) // Report the node server is shutdown.
 	log.Info("Server closed.")
 	return nil
+}
+
+func (node *Node) GetFile(key string) ([]byte, error) {
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
+	defer cancel()
+
+	response, err := node.Get(ctx, &chord.GetRequest{Key: key})
+
+	return response.Value, err
+}
+
+func (node *Node) SetFile(key string, value []byte) error {
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
+	defer cancel()
+
+	_, err := node.Set(ctx, &chord.SetRequest{Key: key, Value: value})
+
+	return err
+}
+
+func (node *Node) DeleteFile(key string) error {
+	// Obtain the context of the connection and set the timeout of the request.
+	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
+	defer cancel()
+
+	_, err := node.Delete(ctx, &chord.DeleteRequest{Key: key})
+
+	return err
 }
 
 // Listen for inbound connections.
