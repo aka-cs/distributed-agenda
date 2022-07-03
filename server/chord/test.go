@@ -201,7 +201,7 @@ func Test() {
 	PrintSuccessors(node)
 	PrintFingers(node)
 
-	Wait(5 * time.Minute)
+	Wait(time.Hour)
 
 	if node.Stop() != nil {
 		log.Fatal(err.Error() + "TERROR\n")

@@ -63,6 +63,14 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 	return node, nil
 }
 
+func DefaultNode(port string) (*Node, error) {
+	conf := DefaultConfig()
+	transport := NewGRPCServices(conf)
+	dictionary := NewDictionary(conf.Hash)
+
+	return NewNode(port, conf, transport, dictionary)
+}
+
 // Node server chord methods.
 
 // GetPredecessor returns the node believed to be the current predecessor.
