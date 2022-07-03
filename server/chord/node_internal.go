@@ -331,6 +331,7 @@ func (node *Node) ClosestFinger(ID []byte) *chord.Node {
 
 // AbsorbPredecessorKeys absorbs the old predecessor replicated keys on this node.
 func (node *Node) AbsorbPredecessorKeys(old *chord.Node) {
+	// If the old predecessor is not this node.
 	if !Equals(old.ID, node.ID) {
 		log.Debug("Absorbing predecessor's keys.")
 
