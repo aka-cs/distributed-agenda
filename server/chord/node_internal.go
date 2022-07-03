@@ -546,7 +546,7 @@ func (node *Node) BroadListen() {
 			continue
 		}
 
-		log.Debugf("Incoming broadcast message. %s sent this: %s", address, buf[:n])
+		log.Debugf("Incoming response message. %s sent this: %s", address, buf[:n])
 
 		// If the incoming message is the specified one, answer with the specific response.
 		if string(buf[:n]) == "Chord?" {
@@ -589,7 +589,7 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 	}
 
 	log.Info("Message broadcast done.")
-	top := time.Now().Add(30 * time.Second)
+	top := time.Now().Add(10 * time.Second)
 
 	log.Info("Waiting for response.")
 
@@ -598,7 +598,7 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 		buf := make([]byte, 1024)
 
 		// Set the deadline to wait for incoming messages.
-		err = pc.SetReadDeadline(time.Now().Add(10 * time.Second))
+		err = pc.SetReadDeadline(time.Now().Add(2 * time.Second))
 		if err != nil {
 			log.Error("Error setting deadline for incoming messages.")
 			return "", err
@@ -611,7 +611,7 @@ func (node *Node) NetDiscover(ip net.IP) (string, error) {
 			continue
 		}
 
-		log.Debugf("Incoming broadcast message. %s sent this: %s", address, buf[:n])
+		log.Debugf("Incoming response message. %s sent this: %s", address, buf[:n])
 
 		if string(buf[:n]) == "I am chord" {
 			return strings.Split(address.String(), ":")[0], nil
