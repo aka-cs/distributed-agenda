@@ -119,8 +119,8 @@ func DummySetter(node *Node, keys int) {
 		case <-ticker.C:
 			PrintFingers(node)
 			i++
-			key := strconv.Itoa(i) + "-" + node.IP
-			rq := chord.SetRequest{Key: key, Value: []byte(strconv.Itoa(i))}
+			key := "trash/" + strconv.Itoa(i) + "-" + node.IP
+			rq := chord.SetRequest{Key: key, Value: []byte(key)}
 			if _, err := node.Set(nil, &rq); err != nil {
 				log.Fatal("Error setting <key, value> pair.\n" + err.Error() + "\n")
 				break
