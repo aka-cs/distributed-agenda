@@ -13,5 +13,5 @@ func main() {
 	rsaPublicteKeyPath := "pub.pem"
 	network := "tcp"
 
-	services.Start(rsaKeyPath, network)
+	services.Start(rsaPrivateKeyPath, rsaPublicteKeyPath, network)
 }
