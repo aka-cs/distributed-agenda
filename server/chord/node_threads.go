@@ -17,7 +17,7 @@ import (
 // the new successor at some point was a predecessor of the old successor, and received from it
 // the replicated keys of this node.
 func (node *Node) Stabilize() {
-	log.Trace("Stabilizing node.\n")
+	log.Trace("Stabilizing node.")
 
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
@@ -26,21 +26,20 @@ func (node *Node) Stabilize() {
 
 	// If successor is this node, there is no way to stabilize (and sure nothing to stabilize).
 	if Equals(suc.ID, node.ID) {
-		log.Trace("No stabilization needed.\n")
+		log.Trace("No stabilization needed.")
 		return
 	}
 
 	candidate, err := node.RPC.GetPredecessor(suc) // Otherwise, obtain the predecessor of the successor.
 	if err != nil {
-		message := "Error stabilizing node.\nCannot get predecessor of successor at " + suc.IP + ".\n"
-		log.Error(message + err.Error() + "\n")
+		log.Errorf("Error stabilizing node.Cannot get predecessor of successor at %s.\n%s", suc.IP, err.Error())
 		return
 	}
 
 	// If candidate is closer to this node than its current successor, update this node successor
 	// with the candidate.
 	if Equals(node.ID, suc.ID) || Between(candidate.ID, node.ID, suc.ID) {
-		log.Debug("Successor updated to node at " + candidate.IP + ".\n")
+		log.Debug("Successor updated to node at " + candidate.IP + ".")
 		// Lock the successor to write on it, and unlock it after.
 		node.sucLock.Lock()
 		node.successors.PushBeg(candidate) // Update this node successor with the obtained node.
@@ -48,18 +47,19 @@ func (node *Node) Stabilize() {
 		node.sucLock.Unlock()
 	}
 
-	err = node.RPC.Notify(suc, node.Node) // Notify successor about the existence of its predecessor.
+	// Notify successor about the existence of its predecessor.
+	err = node.RPC.Notify(suc, node.Node)
 	if err != nil {
-		message := "Error stabilizing node.\nError notifying successor at " + suc.IP + ".\n"
-		log.Error(message + err.Error() + "\n")
+		log.Errorf("Error notifying successor at %s.\n%s", suc.IP, err.Error())
 		return
 	}
-	log.Trace("Node stabilized.\n")
+
+	log.Trace("Node stabilized.")
 }
 
 // PeriodicallyStabilize periodically stabilize the node.
 func (node *Node) PeriodicallyStabilize() {
-	log.Debug("Stabilize thread started.\n")
+	log.Debug("Stabilize thread started.")
 
 	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
@@ -80,7 +80,7 @@ func (node *Node) PeriodicallyStabilize() {
 // already replicated on it). Accordingly, the new keys are also sent to the successor of this node,
 // to maintain replication.
 func (node *Node) CheckPredecessor() {
-	log.Trace("Checking predecessor.\n")
+	log.Trace("Checking predecessor.")
 
 	// Lock the predecessor to read it, and unlock it after.
 	node.predLock.RLock()
@@ -92,7 +92,7 @@ func (node *Node) CheckPredecessor() {
 		err := node.RPC.Check(pred)
 		// In case of error, assume predecessor is not alive, and set this node predecessor to this node.
 		if err != nil {
-			log.Error("Predecessor at " + pred.IP + " failed.\n" + err.Error() + "\n")
+			log.Errorf("Predecessor at %s failed.\n%s", pred.IP, err.Error())
 			// Lock the predecessor to write on it, and unlock it after.
 			node.predLock.Lock()
 			node.predecessor = node.Node
@@ -100,16 +100,16 @@ func (node *Node) CheckPredecessor() {
 			// If there was an old predecessor, absorb its keys.
 			go node.AbsorbPredecessorKeys(pred)
 		} else {
-			log.Trace("Predecessor alive.\n")
+			log.Trace("Predecessor alive.")
 		}
 	} else {
-		log.Trace("There is no predecessor.\n")
+		log.Trace("There is no predecessor.")
 	}
 }
 
 // PeriodicallyCheckPredecessor periodically checks whether predecessor has failed.
 func (node *Node) PeriodicallyCheckPredecessor() {
-	log.Debug("Check predecessor thread started.\n")
+	log.Debug("Check predecessor thread started.")
 
 	ticker := time.NewTicker(500 * time.Millisecond) // Set the time between routine activations.
 	for {
@@ -133,7 +133,7 @@ func (node *Node) PeriodicallyCheckPredecessor() {
 // It is necessary to transfer the keys of this node to its new successor, because this new successor
 // only has its own keys and those that corresponded to the old successor.
 func (node *Node) CheckSuccessor() {
-	log.Trace("Checking successor.\n")
+	log.Trace("Checking successor.")
 
 	// Lock the successor to read it, and unlock it after.
 	node.sucLock.RLock()
@@ -159,10 +159,10 @@ func (node *Node) CheckSuccessor() {
 			}
 			suc = node.successors.Beg() // Take the next successor in queue.
 			node.sucLock.Unlock()
-			log.Error("Successor at " + suc.IP + " failed.\n" + err.Error() + "\n")
+			log.Errorf("Successor at %s failed.\n%s", suc.IP, err.Error())
 		} else {
 			// If successor is alive, return.
-			log.Trace("Successor alive.\n")
+			log.Trace("Successor alive.")
 			return
 		}
 	}
@@ -177,20 +177,21 @@ func (node *Node) CheckSuccessor() {
 			node.sucLock.Unlock()
 		} else {
 			// If there is no predecessor either, there is nothing to do.
-			log.Trace("There is no successor.\n")
+			log.Trace("There is no successor.")
 			return
 		}
 	}
 
 	// Otherwise, report that there is a new successor.
-	log.Debug("Successor updated to node at " + suc.IP + ".\n")
+	log.Debugf("Successor updated to node at %s\n.", suc.IP)
 
+	// Update the new successor replicated keys with this node keys.
 	go node.UpdateSuccessorKeys()
 }
 
 // PeriodicallyCheckSuccessor periodically checks whether successor has failed.
 func (node *Node) PeriodicallyCheckSuccessor() {
-	log.Debug("Check successor thread started.\n")
+	log.Debug("Check successor thread started.")
 
 	ticker := time.NewTicker(1 * time.Second) // Set the time between routine activations.
 	for {
@@ -206,20 +207,20 @@ func (node *Node) PeriodicallyCheckSuccessor() {
 
 // FixFinger update a particular finger on the finger table, and return the index of the next finger to update.
 func (node *Node) FixFinger(index int) int {
-	log.Trace("Fixing finger entry.\n")
-	defer log.Trace("Finger entry fixed.\n")
+	log.Trace("Fixing finger entry.")
+	defer log.Trace("Finger entry fixed.")
 
 	m := node.config.HashSize            // Obtain the finger table size.
 	ID := FingerID(node.ID, index, m)    // Obtain node.ID + 2^(next) mod(2^m).
 	suc, err := node.FindIDSuccessor(ID) // Obtain the node that succeeds ID = node.ID + 2^(next) mod(2^m).
 	// In case of error finding the successor, report the error and skip this finger.
 	if err != nil || suc == nil {
-		log.Error("Successor of ID not found.\nThis finger fix was skipped.\n" + err.Error() + "\n")
+		log.Errorf("Successor of ID not found.This finger fix was skipped.\n%s", err.Error())
 		// Return the next index to fix.
 		return (index + 1) % m
 	}
 
-	log.Trace("Correspondent finger found at " + suc.IP + ".\n")
+	log.Tracef("Correspondent finger found at %s.", suc.IP)
 
 	// If the successor of this ID is this node, then the ring has already been turned around.
 	// Clean the remaining positions and return index 0 to restart the fixing cycle.
@@ -242,7 +243,7 @@ func (node *Node) FixFinger(index int) int {
 
 // PeriodicallyFixFinger periodically fix finger table.
 func (node *Node) PeriodicallyFixFinger() {
-	log.Debug("Fix finger thread started.\n")
+	log.Debug("Fix finger thread started.")
 
 	next := 0                                        // Index of the actual finger entry to fix.
 	ticker := time.NewTicker(100 * time.Millisecond) // Set the time between routine activations.
@@ -265,11 +266,11 @@ func (node *Node) PeriodicallyFixFinger() {
 // Otherwise, fix the next entry, updating its value with the obtained successor,
 // and return the next entry of the queue.
 func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.Node] {
-	log.Trace("Fixing successor queue entry.\n")
+	log.Trace("Fixing successor queue entry.")
 
 	// If the queue node is null, report error.
 	if entry == nil {
-		log.Error("Error fixing successor queue entry: queue node argument cannot be null.\n")
+		log.Error("Error fixing successor queue entry: queue node argument cannot be null.")
 		return nil
 	}
 
@@ -284,7 +285,7 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 	// If the queue node is not inside the queue, return the next node.
 	// If this queue node is the last one, and the queue is fulfilled, return null to restart the fixing cycle.
 	if !inside || next == nil && fulfilled {
-		log.Trace("Successor queue entry fixed.\n")
+		log.Trace("Successor queue entry fixed.")
 		return next
 	}
 
@@ -299,9 +300,8 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 			return next
 		} else {
 			// Otherwise, report the error and remove the node from the queue of successors.
-			message := "Error getting successor of successor at " + value.IP + ".\n" +
-				"Therefore is assumed dead and removed from the queue of successors.\n"
-			log.Error(message + err.Error() + "\n")
+			log.Errorf("Error getting successor of successor at %s."+
+				"Therefore is assumed dead and removed from the queue of successors.\n%s", value.IP, err.Error())
 
 			node.sucLock.Lock()           // Lock the queue to write on it, and unlock it after.
 			node.successors.Remove(entry) // Remove it from the queue of successors.
@@ -351,13 +351,13 @@ func (node *Node) FixSuccessor(entry *QueueNode[chord.Node]) *QueueNode[chord.No
 		return nil
 	}
 
-	log.Trace("Successor queue entry fixed.\n")
+	log.Trace("Successor queue entry fixed.")
 	return next
 }
 
 // PeriodicallyFixSuccessor periodically fix entries of the queue of successors.
 func (node *Node) PeriodicallyFixSuccessor() {
-	log.Debug("Fix successor thread started.\n")
+	log.Debug("Fix successor thread started.")
 
 	ticker := time.NewTicker(500 * time.Millisecond) // Set the time between routine activations.
 	var entry *QueueNode[chord.Node] = nil           // Queue node entry for iterations.
@@ -403,7 +403,7 @@ func (node *Node) FixStorage(key string) {
 
 	keyNode, err := node.LocateKey(key) // Locate the node that corresponds to the key.
 	if err != nil {
-		log.Error("Error fixing local storage dictionary.\n" + err.Error() + "\n")
+		log.Errorf("Error fixing local storage dictionary.\n%s", err.Error())
 		return
 	}
 
@@ -421,17 +421,26 @@ func (node *Node) FixStorage(key string) {
 
 		// Lock the storage dictionary to write on it, and unlock it after.
 		node.dictLock.Lock()
-		node.dictionary.Delete(key) // Delete the key from local storage.
+		err = node.dictionary.Delete(key) // Delete the key from local storage.
 		node.dictLock.Unlock()
+		if err != nil {
+			log.Errorf("Error deleting key %s in local storage.\n%s", keyNode.IP, err.Error())
+			return
+		}
 
 		// Set this <key, value> pair on the corresponding node.
 		err = node.RPC.Set(keyNode, &chord.SetRequest{Key: key, Value: value})
 		if err != nil {
+			log.Errorf("Error relocating key %s to %s.\n%s", key, keyNode.IP, err.Error())
 			// In case of error, reinsert the key on this node storage, to prevent the loss of information.
 			// Lock the storage dictionary to write on it, and unlock it after.
 			node.dictLock.Lock()
-			node.dictionary.Set(key, value) // Reinsert the key on local storage.
+			err = node.dictionary.Set(key, value) // Reinsert the key on local storage.
 			node.dictLock.Unlock()
+			if err != nil {
+				log.Errorf("Error reinserting key %s in local storage.\n%s", keyNode.IP, err.Error())
+				return
+			}
 			return
 		}
 	}
@@ -439,7 +448,7 @@ func (node *Node) FixStorage(key string) {
 
 // PeriodicallyFixStorage periodically fix storage dictionary.
 func (node *Node) PeriodicallyFixStorage() {
-	log.Debug("Fix storage thread started.\n")
+	log.Debug("Fix storage thread started.")
 
 	next := 0                                        // Index of the actual storage key to fix.
 	keys := make([]string, 0)                        // Keys to fix.
@@ -462,8 +471,8 @@ func (node *Node) PeriodicallyFixStorage() {
 				_, out, err := node.dictionary.Partition(pred.ID, node.ID) // Obtain the dictionary of replicated keys.
 				node.dictLock.RUnlock()
 				if err != nil {
-					log.Error("Error fixing local storage dictionary.\n" +
-						"Cannot obtain replicated keys on this node.\n" + err.Error() + "\n")
+					log.Errorf("Error fixing local storage dictionary. "+
+						"Cannot obtain replicated keys on this node.\n%s", err.Error())
 					continue
 				}
 
