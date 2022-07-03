@@ -109,9 +109,8 @@ func (node *Node) Stop() error {
 
 	// If node server is not actually running, report error.
 	if !IsOpen(node.shutdown) {
-		message := "Error stopping server: this node server is actually shutdown."
-		log.Error(message)
-		return errors.New(message)
+		log.Error("Error stopping server: this node server is actually shutdown.")
+		return errors.New("error stopping server: this node server is actually shutdown")
 	}
 
 	// Lock the successor to read it, and unlock it after.
