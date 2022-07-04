@@ -7,7 +7,6 @@ import (
 	"server/proto"
 	"strconv"
 
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -79,7 +78,7 @@ func getUsernameFromContext(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 
 	if !ok {
-		return "", status.Error(codes.Internal, "")
+		return "", status.Error(codes.Internal, "Error extracting user")
 	}
 
 	return md["username"][0], nil
@@ -181,6 +180,5 @@ func remove[T any](s []T, i int) []T {
 func isUser(username string) bool {
 	user := &proto.User{}
 	_, err := persistency.Load(node, filepath.Join("User", username), user)
-	log.Infof("%v", err)
 	return err == nil
 }

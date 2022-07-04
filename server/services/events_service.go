@@ -162,7 +162,7 @@ func (*EventsServer) DeleteEvent(ctx context.Context, request *proto.DeleteEvent
 	return &proto.DeleteEventResponse{}, nil
 }
 
-func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.ConfirmEventResponse, error) {
+func (*EventsServer) ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.ConfirmEventResponse, error) {
 
 	username, err := getUsernameFromContext(ctx)
 
@@ -224,7 +224,7 @@ func ConfirmEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*pro
 	return &proto.ConfirmEventResponse{}, nil
 }
 
-func RejectEvent(ctx context.Context, request *proto.ConfirmEventRequest) (*proto.RejectEventResponse, error) {
+func (*EventsServer) RejectEvent(ctx context.Context, request *proto.RejectEventRequest) (*proto.RejectEventResponse, error) {
 
 	username, err := getUsernameFromContext(ctx)
 
