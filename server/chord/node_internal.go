@@ -3,13 +3,14 @@ package chord
 import (
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 	"net"
 	"server/chord/chord"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
 // Node server internal methods.
@@ -164,7 +165,7 @@ func (node *Node) Stop() error {
 }
 
 // GetKey gets the value associated to a key.
-func (node *Node) GetKey(key string, lock bool) ([]byte, error) {
+func (node *Node) GetKey(key string, lock string) ([]byte, error) {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
@@ -180,7 +181,7 @@ func (node *Node) GetKey(key string, lock bool) ([]byte, error) {
 }
 
 // SetKey sets a <key, value> pair on storage.
-func (node *Node) SetKey(key string, value []byte, lock bool) error {
+func (node *Node) SetKey(key string, value []byte, lock string) error {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
@@ -193,7 +194,7 @@ func (node *Node) SetKey(key string, value []byte, lock bool) error {
 }
 
 // DeleteKey deletes a <key, value> pair from storage.
-func (node *Node) DeleteKey(key string, lock bool) error {
+func (node *Node) DeleteKey(key string, lock string) error {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
