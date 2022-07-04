@@ -24,7 +24,7 @@ server/logs
 /server/chord/test.go
 
 # RSA
-*.pem
+#*.pem
 /Dockerfile
 /docker-compose.yml
 
