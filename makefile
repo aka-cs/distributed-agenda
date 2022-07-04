@@ -4,12 +4,20 @@ go := go
 make := make
 
 .PHONY: client
-client: py-protoc
+client:
 	$(make) -C ./client client python=$(python)
 
+.PHONY: client-install
+client-install:
+	$(make) -C ./client install python=$(python)
+
 .PHONY: server
-server: go-protoc chord-protoc
+server:
 	$(make) -C ./server server go=$(go)
+
+.PHONY: server-install
+server-install:
+	$(make) -C ./server install go=$(go)
 
 .PHONY: pbc
 pbc:go-protoc py-protoc chord-protoc;
@@ -25,4 +33,4 @@ py-protoc:
 
 .PHONY: chord-protoc
 chord-protoc:
-	$(make) -C ./server/chord chord-protoc
+	$(make) -C ./server/chord chord-protoc go=$(go)
