@@ -7,14 +7,28 @@
 
 ## Instalación de dependencias
 
+### Cliente
+
 ```bash
 make client-install
+```
+
+### Servidor
+
+```bash
 make server-install
 ```
 
 ## Ejecución
 
+### Cliente
+
 ```bash
 make client
+```
+
+### Servidor
+
+```bash
 make server
 ```
