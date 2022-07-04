@@ -7,6 +7,7 @@ import (
 	"server/proto"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -175,4 +176,11 @@ func getUserEvents(username string) ([]proto.Event, error) {
 func remove[T any](s []T, i int) []T {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
+}
+
+func isUser(username string) bool {
+	user := &proto.User{}
+	_, err := persistency.Load(node, filepath.Join("User", username), user)
+	log.Infof("%v", err)
+	return err == nil
 }

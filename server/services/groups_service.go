@@ -30,7 +30,7 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	username, err := getUsernameFromContext(ctx)
 
 	if err != nil {
-		return &proto.CreateGroupResponse{}, status.Error(codes.Internal, "")
+		return &proto.CreateGroupResponse{}, err
 	}
 
 	all_users := make(map[string]void)
@@ -62,6 +62,9 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	for _, member := range request.GetUsers() {
 		if _, ok := all_users[member]; ok {
 			continue
+		}
+		if !isUser(username) {
+			return &proto.CreateGroupResponse{}, status.Errorf(codes.NotFound, "User %s not found", member)
 		}
 		members.Members[int32(proto.UserLevel_USER)].Users = append(members.Members[int32(proto.UserLevel_USER)].Users, member)
 		all_users[member] = empty
@@ -190,6 +193,10 @@ func (*GroupsServer) AddUser(ctx context.Context, request *proto.AddUserRequest)
 
 	if err != nil {
 		return &proto.AddUserResponse{}, err
+	}
+
+	if !isUser(userID) {
+		return &proto.AddUserResponse{}, status.Errorf(codes.NotFound, "User %s not found", username)
 	}
 
 	isOwner, err := checkIsGroupOwner(username, groupID)

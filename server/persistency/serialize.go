@@ -26,7 +26,7 @@ func Save[T protoreflect.ProtoMessage](node *chord.Node, object T, path string) 
 		return status.Error(codes.Internal, "Error saving data")
 	}
 
-	err = node.SetKey(fullPath, data, "")
+	err = node.SetKey(fullPath, data, false)
 
 	if err != nil {
 		log.Errorf("Error saving file")
@@ -44,7 +44,7 @@ func Load[T protoreflect.ProtoMessage](node *chord.Node, path string, result T) 
 
 	var empty T
 
-	data, err := node.GetKey(fullPath, "")
+	data, err := node.GetKey(fullPath, false)
 
 	if err != nil {
 		log.Errorf("Error getting file: %v", err)
@@ -64,7 +64,7 @@ func Load[T protoreflect.ProtoMessage](node *chord.Node, path string, result T) 
 func Delete(node *chord.Node, path string) error {
 	fullPath := strings.ToLower(filepath.ToSlash(filepath.Join("resources", path+".bin")))
 
-	err := node.DeleteKey(fullPath, "")
+	err := node.DeleteKey(fullPath, false)
 
 	if err != nil {
 		log.Errorf("Error deleting file: %v", err)
@@ -78,7 +78,7 @@ func FileExists(node *chord.Node, path string) bool {
 
 	log.Debugf("Checking if file exists: %s", fullPath)
 
-	if _, err := node.GetKey(fullPath, ""); errors.Is(err, os.ErrNotExist) {
+	if _, err := node.GetKey(fullPath, false); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	log.Debugf("File already exists: %v", fullPath)
