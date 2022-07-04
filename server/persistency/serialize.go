@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"server/chord"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
@@ -14,7 +15,7 @@ import (
 )
 
 func Save[T protoreflect.ProtoMessage](node *chord.Node, object T, path string) error {
-	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
+	fullPath := strings.ToLower(filepath.ToSlash(filepath.Join("resources", path+".bin")))
 
 	log.Debugf("Saving file: %s", fullPath)
 
@@ -25,7 +26,7 @@ func Save[T protoreflect.ProtoMessage](node *chord.Node, object T, path string) 
 		return status.Error(codes.Internal, "Error saving data")
 	}
 
-	err = node.SetKey(fullPath, data)
+	err = node.SetKey(fullPath, data, "")
 
 	if err != nil {
 		log.Errorf("Error saving file")
@@ -37,13 +38,13 @@ func Save[T protoreflect.ProtoMessage](node *chord.Node, object T, path string) 
 
 func Load[T protoreflect.ProtoMessage](node *chord.Node, path string, result T) (T, error) {
 
-	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
+	fullPath := strings.ToLower(filepath.ToSlash(filepath.Join("resources", path+".bin")))
 
 	log.Debugf("Loading file: %s", fullPath)
 
 	var empty T
 
-	data, err := node.GetKey(fullPath)
+	data, err := node.GetKey(fullPath, "")
 
 	if err != nil {
 		log.Errorf("Error getting file: %v", err)
@@ -61,9 +62,9 @@ func Load[T protoreflect.ProtoMessage](node *chord.Node, path string, result T) 
 }
 
 func Delete(node *chord.Node, path string) error {
-	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
+	fullPath := strings.ToLower(filepath.ToSlash(filepath.Join("resources", path+".bin")))
 
-	err := node.DeleteKey(fullPath)
+	err := node.DeleteKey(fullPath, "")
 
 	if err != nil {
 		log.Errorf("Error deleting file: %v", err)
@@ -73,11 +74,11 @@ func Delete(node *chord.Node, path string) error {
 }
 
 func FileExists(node *chord.Node, path string) bool {
-	fullPath := filepath.ToSlash(filepath.Join("resources", path+".bin"))
+	fullPath := strings.ToLower(filepath.ToSlash(filepath.Join("resources", path+".bin")))
 
 	log.Debugf("Checking if file exists: %s", fullPath)
 
-	if _, err := node.GetKey(fullPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := node.GetKey(fullPath, ""); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	log.Debugf("File already exists: %v", fullPath)

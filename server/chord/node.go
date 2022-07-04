@@ -2,7 +2,6 @@ package chord
 
 import (
 	"errors"
-	"google.golang.org/grpc/peer"
 	"math/big"
 	"net"
 	"os"
@@ -182,15 +181,10 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
 	log.Infof("Get: key=%s.", req.Key)
-
-	p, ok := peer.FromContext(ctx) // Obtain the requesting information.
-	if !ok {
-		log.Error("Error obtaining requesting address.")
-	}
-	address := p.Addr.String() // Obtain the requesting address.
+	address := req.Lock
 
 	// If block is needed.
-	if req.Lock {
+	if req.Lock != "" && req.Lock != "-1" {
 		node.dictLock.RLock()                         // Lock the dictionary to read it, and unlock it after.
 		err := node.dictionary.Lock(req.Key, address) // Lock this key on storage.
 		node.dictLock.RUnlock()
@@ -256,14 +250,10 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
 	log.Infof("Set: key=%s value=%s.", req.Key, string(req.Value))
 
-	p, ok := peer.FromContext(ctx) // Obtain the requesting information.
-	if !ok {
-		log.Error("Error obtaining requesting address.")
-	}
-	address := p.Addr.String() // Obtain the requesting address.
+	address := req.Lock // Obtain the requesting address.
 
 	// If block is needed.
-	if req.Lock {
+	if req.Lock != "" && req.Lock != "-1" {
 		node.dictLock.RLock()                         // Lock the dictionary to read it, and unlock it after.
 		err := node.dictionary.Lock(req.Key, address) // Lock this key on storage.
 		node.dictLock.RUnlock()
@@ -365,14 +355,10 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
 	log.Infof("Delete: key=%s.", req.Key)
 
-	p, ok := peer.FromContext(ctx) // Obtain the requesting information.
-	if !ok {
-		log.Error("Error obtaining requesting address.")
-	}
-	address := p.Addr.String() // Obtain the requesting address.
+	address := req.Lock // Obtain the requesting address.
 
 	// If block is needed.
-	if req.Lock {
+	if req.Lock != "" && req.Lock != "-1" {
 		node.dictLock.RLock()                         // Lock the dictionary to read it, and unlock it after.
 		err := node.dictionary.Lock(req.Key, address) // Lock this key on storage.
 		node.dictLock.RUnlock()

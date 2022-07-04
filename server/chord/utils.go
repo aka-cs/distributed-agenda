@@ -2,11 +2,12 @@ package chord
 
 import (
 	"bytes"
-	log "github.com/sirupsen/logrus"
 	"hash"
 	"math/big"
 	"net"
 	"server/chord/chord"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Useful definitions.
@@ -46,7 +47,7 @@ func GetOutboundIP() net.IP {
 	return localAddr.IP
 }
 
-func Keys[T](dictionary map[string]T) []string {
+func Keys[T any](dictionary map[string]T) []string {
 	keys := make([]string, 0)
 
 	for key := range dictionary {
