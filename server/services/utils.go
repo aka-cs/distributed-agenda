@@ -7,6 +7,8 @@ import (
 	"server/proto"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -112,7 +114,7 @@ func updateEventHistory(ctx context.Context, action proto.Action, event *proto.E
 }
 
 func checkValid(event *proto.Event, users []string) ([]string, error) {
-
+	log.Debugf("Checking event is valid for users: %v", users)
 	invalid := make([]string, 0)
 
 	for _, user := range users {
