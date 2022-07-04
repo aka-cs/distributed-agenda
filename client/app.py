@@ -34,7 +34,7 @@ def every(__seconds: float, func, *args, **kwargs):
 # run every in a different thread
 if not Storage.get('repeat'):
     threads = [threading.Thread(target=every, args=(60, update_servers)),
-               threading.Thread(target=every, args=(10, process_requests)),
+               threading.Thread(target=every, args=(30, process_requests)),
                threading.Thread(target=every, args=(60, update_history))]
     running_ctx = get_script_run_ctx()
     for thread in threads:

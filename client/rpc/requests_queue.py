@@ -67,6 +67,7 @@ async def process_requests():
                         stub = EventsServiceStub(channel)
                         match request.request:
                             case CreateEventRequest():
+                                logging.info("Request is for create event")
                                 try:
                                     response = await stub.CreateEvent(request.request)
                                 except grpclib.exceptions.GRPCError as err:
@@ -80,6 +81,8 @@ async def process_requests():
                             case RejectEventRequest():
                                 logging.info(f"Rejecting event {request.request}")
                                 response = await stub.RejectEvent(request.request)
+                            case _:
+                                logging.info(f"Unknown request {request.request}")
                 case _:
                     logging.info("Request is for unknown service")
         except BaseException as err:

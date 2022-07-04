@@ -81,7 +81,7 @@ async def get_history() -> List[proto.history_pb2.HistoryEntry]:
         history = []
     except ValueError:
         history = []
-    logging.info(f'History loaded from disk: {history}')
+    # logging.info(f'History loaded from disk: {history[len(history) - 2:]}')
     return history
 
 

@@ -46,13 +46,13 @@ async def get_user_events():
             events[entry.event.id] = entry.event
             if entry.event.draft:
                 drafts[entry.event.id] = entry.event
-        if entry.action == Action.CONFIRM:
+        if entry.action == Action.CONFIRM and drafts.get(entry.event.id) is not None:
             del drafts[entry.event.id]
         if entry.action == Action.DELETE:
             del events[entry.event.id]
         if entry.action == Action.UPDATE:
             events[entry.event.id] = entry.event
-            if entry.event.draft:
+            if entry.event.draft and drafts.get(entry.event.id) is not None:
                 del drafts[entry.event.id]
 
     local = get_requests()
