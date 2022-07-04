@@ -1,15 +1,12 @@
-import datetime
-import pandas as pd
 import calendar
-import logging
+import datetime
 
-from pytz import HOUR
+import pandas as pd
 
 from proto.events_pb2 import Event
-from sqlalchemy import false
 
 
-def create_table(user_events: dict[int, Event], day: datetime.datetime = None):
+def create_table(user_events: dict[int, Event], day: datetime.date = None):
     if day is None:
         day = datetime.datetime.today()
 
@@ -24,20 +21,21 @@ def create_table(user_events: dict[int, Event], day: datetime.datetime = None):
             for i in user_events:
                 start = user_events[i].start.ToDatetime()
                 end = user_events[i].end.ToDatetime()
-                current = datetime.datetime.combine(c.date(), datetime.time(j))
+                current = datetime.datetime.combine(c, datetime.time(j))
                 if start <= current <= end:
-                    data[j].append("-")
+                    data[j].append(" ")
                     break
             else:
                 data[j].append("")
-            
 
     df = pd.DataFrame(data, columns=days, index=[i for i in range(24)])
 
     def color_survived(val: str):
-        color = 'indianred' if val.strip() else 'green'
+        color = 'lightgreen' if val != '' else ''
         return f'background-color: {color}'
 
     df = df.style.applymap(color_survived, subset=days)
+
+
 
     return df

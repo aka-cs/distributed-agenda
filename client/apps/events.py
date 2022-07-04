@@ -1,5 +1,4 @@
 import datetime
-import logging
 
 import streamlit as st
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -12,17 +11,16 @@ from rpc.history import update_history
 async def app():
     st.title('Events')
 
-    st.write("This is a sample home page in the mutliapp.")
-    st.write("See `apps/events.py` to know how to use it.")
-
-    st.markdown("### Sample Data")
+    st.markdown("### Recent Events")
 
     user_events = await get_user_events()
 
-    df = create_table(user_events[0])
-    st.write(df)
+    date = st.date_input('Go to a date', value=datetime.datetime.today())
+    if not date:
+        date = datetime.datetime.today()
 
-    st.write('Navigate to `Data Stats` page to visualize the data')
+    df = create_table(user_events[0], date)
+    st.dataframe(df, 1920, 1080)
 
     st.write('-' * 100)
 
