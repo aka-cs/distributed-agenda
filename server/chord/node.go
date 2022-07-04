@@ -66,9 +66,9 @@ func NewNode(port string, configuration *Configuration, transport RemoteServices
 
 // DefaultNode creates and returns a new Node with default configurations.
 func DefaultNode(port string) (*Node, error) {
-	conf := DefaultConfig()                // Creates a default configuration.
-	transport := NewGRPCServices(conf)     // Creates a default RPC transport layer.
-	dictionary := NewDictionary(conf.Hash) // Creates a default dictionary.
+	conf := DefaultConfig()                    // Creates a default configuration.
+	transport := NewGRPCServices(conf)         // Creates a default RPC transport layer.
+	dictionary := NewDiskDictionary(conf.Hash) // Creates a default dictionary.
 
 	// Return the default node.
 	return NewNode(port, conf, transport, dictionary)
@@ -181,10 +181,10 @@ func (node *Node) Check(ctx context.Context, req *chord.EmptyRequest) (*chord.Em
 // Get the value associated to a key.
 func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetResponse, error) {
 	log.Infof("Get: key=%s.", req.Key)
-	address := req.Lock
+	address := req.IP // Obtain the requesting address.
 
 	// If block is needed.
-	if req.Lock != "" && req.Lock != "-1" {
+	if req.Lock {
 		node.dictLock.RLock()                         // Lock the dictionary to read it, and unlock it after.
 		err := node.dictionary.Lock(req.Key, address) // Lock this key on storage.
 		node.dictLock.RUnlock()
@@ -225,8 +225,9 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 	if Equals(keyNode.ID, node.ID) {
 		log.Debug("Resolving get request locally.")
 
-		node.dictLock.RLock()                               // Lock the dictionary to read it, and unlock it after.
-		value, err := node.dictionary.Get(req.Key, address) // Get the value associated to this key from storage.
+		// Lock the dictionary to read it, and unlock it after.
+		node.dictLock.RLock()
+		value, err := node.dictionary.GetWithLock(req.Key, address) // Get the value associated to this key from storage.
 		node.dictLock.RUnlock()
 		if err != nil && err != os.ErrPermission {
 			log.Error("Error getting key.\n" + err.Error())
@@ -249,11 +250,10 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
 	log.Infof("Set: key=%s value=%s.", req.Key, string(req.Value))
-
-	address := req.Lock // Obtain the requesting address.
+	address := req.IP // Obtain the requesting address.
 
 	// If block is needed.
-	if req.Lock != "" && req.Lock != "-1" {
+	if req.Lock {
 		node.dictLock.RLock()                         // Lock the dictionary to read it, and unlock it after.
 		err := node.dictionary.Lock(req.Key, address) // Lock this key on storage.
 		node.dictLock.RUnlock()
@@ -275,8 +275,9 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	if req.Replica {
 		log.Debug("Resolving set request locally (replication).")
 
-		node.dictLock.Lock()                                    // Lock the dictionary to write on it, and unlock it after.
-		err := node.dictionary.Set(req.Key, req.Value, address) // Set the <key, value> pair on storage.
+		// Lock the dictionary to write on it, and unlock it after.
+		node.dictLock.Lock()
+		err := node.dictionary.SetWithLock(req.Key, req.Value, address) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
 		if err != nil {
 			log.Error("Error setting key.")
@@ -313,8 +314,9 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 	if Equals(keyNode.ID, node.ID) {
 		log.Debug("Resolving set request locally.")
 
-		node.dictLock.Lock()                                    // Lock the dictionary to write on it, and unlock it after.
-		err := node.dictionary.Set(req.Key, req.Value, address) // Set the <key, value> pair on storage.
+		// Lock the dictionary to write on it, and unlock it after.
+		node.dictLock.Lock()
+		err := node.dictionary.SetWithLock(req.Key, req.Value, address) // Set the <key, value> pair on storage.
 		node.dictLock.Unlock()
 		if err != nil {
 			log.Error("Error setting key.")
@@ -354,11 +356,10 @@ func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyR
 // Delete a <key, value> pair from storage.
 func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.EmptyResponse, error) {
 	log.Infof("Delete: key=%s.", req.Key)
-
-	address := req.Lock // Obtain the requesting address.
+	address := req.IP // Obtain the requesting address.
 
 	// If block is needed.
-	if req.Lock != "" && req.Lock != "-1" {
+	if req.Lock {
 		node.dictLock.RLock()                         // Lock the dictionary to read it, and unlock it after.
 		err := node.dictionary.Lock(req.Key, address) // Lock this key on storage.
 		node.dictLock.RUnlock()
@@ -380,8 +381,9 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	if req.Replica {
 		log.Debug("Resolving delete request locally (replication).")
 
-		node.dictLock.Lock()                            // Lock the dictionary to write on it, and unlock it after.
-		err := node.dictionary.Delete(req.Key, address) // Delete the <key, value> pair from storage.
+		// Lock the dictionary to write on it, and unlock it after.
+		node.dictLock.Lock()
+		err := node.dictionary.DeleteWithLock(req.Key, address) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
 		if err != nil && err != os.ErrPermission {
 			log.Error("Error deleting key.")
@@ -418,8 +420,9 @@ func (node *Node) Delete(ctx context.Context, req *chord.DeleteRequest) (*chord.
 	if Equals(keyNode.ID, node.ID) {
 		log.Debug("Resolving delete request locally.")
 
-		node.dictLock.Lock() // Lock the dictionary to write on it, and unlock it at the end of function.
-		err := node.dictionary.Delete(req.Key, address)
+		// Lock the dictionary to write on it, and unlock it at the end of function.
+		node.dictLock.Lock()
+		err := node.dictionary.DeleteWithLock(req.Key, address) // Delete the <key, value> pair from storage.
 		node.dictLock.Unlock()
 		if err != nil && err != os.ErrPermission {
 			log.Error("Error deleting key.")

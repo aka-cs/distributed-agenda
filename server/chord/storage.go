@@ -12,9 +12,13 @@ import (
 )
 
 type Storage interface {
-	Get(string, string) ([]byte, error)
-	Set(string, []byte, string) error
-	Delete(string, string) error
+	Get(string) ([]byte, error)
+	Set(string, []byte) error
+	Delete(string) error
+
+	GetWithLock(string, string) ([]byte, error)
+	SetWithLock(string, []byte, string) error
+	DeleteWithLock(string, string) error
 
 	Partition([]byte, []byte) (map[string][]byte, map[string][]byte, error)
 	Extend(map[string][]byte) error
@@ -41,39 +45,51 @@ func NewDictionary(hash func() hash.Hash) *Dictionary {
 	}
 }
 
-func (dictionary *Dictionary) Get(key, permission string) ([]byte, error) {
+func (dictionary *Dictionary) Get(key string) ([]byte, error) {
+	value, ok := dictionary.data[key]
+
+	if !ok {
+		return nil, errors.New("Key not found.\n")
+	}
+
+	return value, nil
+}
+
+func (dictionary *Dictionary) Set(key string, value []byte) error {
+	dictionary.data[key] = value
+	return nil
+}
+
+func (dictionary *Dictionary) Delete(key string) error {
+	delete(dictionary.data, key)
+	return nil
+}
+
+func (dictionary *Dictionary) GetWithLock(key, permission string) ([]byte, error) {
 	lock, ok := dictionary.lock[key]
 
-	if !ok || permission == "" || permission == lock {
-		value, ok := dictionary.data[key]
-
-		if !ok {
-			return nil, errors.New("Key not found.\n")
-		}
-
-		return value, nil
+	if !ok || permission == lock {
+		return dictionary.Get(key)
 	}
 
 	return nil, os.ErrPermission
 }
 
-func (dictionary *Dictionary) Set(key string, value []byte, permission string) error {
+func (dictionary *Dictionary) SetWithLock(key string, value []byte, permission string) error {
 	lock, ok := dictionary.lock[key]
 
-	if !ok || permission == "" || permission == lock {
-		dictionary.data[key] = value
-		return nil
+	if !ok || permission == lock {
+		return dictionary.Set(key, value)
 	}
 
 	return os.ErrPermission
 }
 
-func (dictionary *Dictionary) Delete(key string, permission string) error {
+func (dictionary *Dictionary) DeleteWithLock(key string, permission string) error {
 	lock, ok := dictionary.lock[key]
 
-	if !ok || permission == "" || permission == lock {
-		delete(dictionary.data, key)
-		return nil
+	if !ok || permission == lock {
+		return dictionary.Delete(key)
 	}
 
 	return os.ErrPermission
@@ -161,64 +177,76 @@ func NewDiskDictionary(hash func() hash.Hash) *DiskDictionary {
 	}
 }
 
-func (dictionary *DiskDictionary) Get(key, permission string) ([]byte, error) {
+func (dictionary *DiskDictionary) Get(key string) ([]byte, error) {
+	log.Debugf("Loading file: %s\n", key)
+
+	value, err := ioutil.ReadFile(key)
+	if err != nil {
+		log.Errorf("Error loading file %s:\n%v\n", key, err)
+		return nil, status.Error(codes.Internal, "Couldn't load file")
+	}
+
+	return value, nil
+}
+
+func (dictionary *DiskDictionary) Set(key string, value []byte) error {
+	dictionary.data[key] = void{}
+
+	log.Debugf("Saving file: %s\n", key)
+
+	dir := filepath.Dir(key)
+	err := os.MkdirAll(dir, os.ModePerm)
+	if err != nil {
+		log.Errorf("Couldn't create directory %s:\n%v\n", key, err)
+		return status.Error(codes.Internal, "Couldn't create directory")
+	}
+
+	err = ioutil.WriteFile(key, value, 0600)
+
+	if err != nil {
+		log.Errorf("Error creating file %s:\n%v\n", key, err)
+		return status.Error(codes.Internal, "Couldn't create file")
+	}
+
+	return nil
+}
+
+func (dictionary *DiskDictionary) Delete(key string) error {
+	err := os.Remove(key)
+	delete(dictionary.data, key)
+
+	if err != nil {
+		log.Errorf("Error deleting file:\n%v\n", err)
+		return status.Error(codes.Internal, "Couldn't delete file")
+	}
+	return nil
+}
+
+func (dictionary *DiskDictionary) GetWithLock(key, permission string) ([]byte, error) {
 	lock, ok := dictionary.lock[key]
 
-	if !ok || permission == "" || permission == lock {
-		log.Debugf("Loading file: %s\n", key)
-
-		value, err := ioutil.ReadFile(key)
-		if err != nil {
-			log.Errorf("Error loading file %s:\n%v\n", key, err)
-			return nil, status.Error(codes.Internal, "Couldn't load file")
-		}
-
-		return value, nil
+	if !ok || permission == lock {
+		return dictionary.Get(key)
 	}
 
 	return nil, os.ErrPermission
 }
 
-func (dictionary *DiskDictionary) Set(key string, value []byte, permission string) error {
+func (dictionary *DiskDictionary) SetWithLock(key string, value []byte, permission string) error {
 	lock, ok := dictionary.lock[key]
 
-	if !ok || permission == "" || permission == lock {
-		dictionary.data[key] = void{}
-
-		log.Debugf("Saving file: %s\n", key)
-
-		dir := filepath.Dir(key)
-		err := os.MkdirAll(dir, os.ModePerm)
-		if err != nil {
-			log.Errorf("Couldn't create directory %s:\n%v\n", key, err)
-			return status.Error(codes.Internal, "Couldn't create directory")
-		}
-
-		err = ioutil.WriteFile(key, value, 0600)
-
-		if err != nil {
-			log.Errorf("Error creating file %s:\n%v\n", key, err)
-			return status.Error(codes.Internal, "Couldn't create file")
-		}
-
-		return nil
+	if !ok || permission == lock {
+		return dictionary.Set(key, value)
 	}
 
 	return os.ErrPermission
 }
 
-func (dictionary *DiskDictionary) Delete(key, permission string) error {
+func (dictionary *DiskDictionary) DeleteWithLock(key string, permission string) error {
 	lock, ok := dictionary.lock[key]
 
-	if !ok || permission == "" || permission == lock {
-		err := os.Remove(key)
-		delete(dictionary.data, key)
-
-		if err != nil {
-			log.Errorf("Error deleting file:\n%v\n", err)
-			return status.Error(codes.Internal, "Couldn't delete file")
-		}
-		return nil
+	if !ok || permission == lock {
+		return dictionary.Delete(key)
 	}
 
 	return os.ErrPermission
@@ -234,7 +262,7 @@ func (dictionary *DiskDictionary) Partition(L, R []byte) (map[string][]byte, map
 	}
 
 	for key := range dictionary.data {
-		value, err := dictionary.Get(key, "")
+		value, err := dictionary.Get(key)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -253,7 +281,7 @@ func (dictionary *DiskDictionary) Partition(L, R []byte) (map[string][]byte, map
 
 func (dictionary *DiskDictionary) Extend(data map[string][]byte) error {
 	for key, value := range data {
-		err := dictionary.Set(key, value, "")
+		err := dictionary.Set(key, value)
 		if err != nil {
 			return err
 		}
@@ -263,7 +291,7 @@ func (dictionary *DiskDictionary) Extend(data map[string][]byte) error {
 
 func (dictionary *DiskDictionary) Discard(data []string) error {
 	for _, key := range data {
-		err := dictionary.Delete(key, "")
+		err := dictionary.Delete(key)
 		if err != nil {
 			return err
 		}
@@ -276,7 +304,7 @@ func (dictionary *DiskDictionary) Clear() error {
 	keys := Keys(dictionary.data)
 
 	for _, key := range keys {
-		err := dictionary.Delete(key, "")
+		err := dictionary.Delete(key)
 		if err != nil {
 			return err
 		}

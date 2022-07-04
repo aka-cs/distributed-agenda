@@ -165,14 +165,14 @@ func (node *Node) Stop() error {
 }
 
 // GetKey gets the value associated to a key.
-func (node *Node) GetKey(key string, lock string) ([]byte, error) {
+func (node *Node) GetKey(key string, lock bool) ([]byte, error) {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
 
 	log.Info("Resolving get request.")
 
-	response, err := node.Get(ctx, &chord.GetRequest{Key: key, Lock: lock})
+	response, err := node.Get(ctx, &chord.GetRequest{Key: key, Lock: lock, IP: node.IP})
 	if err != nil {
 		return nil, err
 	}
@@ -181,27 +181,27 @@ func (node *Node) GetKey(key string, lock string) ([]byte, error) {
 }
 
 // SetKey sets a <key, value> pair on storage.
-func (node *Node) SetKey(key string, value []byte, lock string) error {
+func (node *Node) SetKey(key string, value []byte, lock bool) error {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
 
 	log.Info("Resolving set request.")
 
-	_, err := node.Set(ctx, &chord.SetRequest{Key: key, Value: value, Lock: lock})
+	_, err := node.Set(ctx, &chord.SetRequest{Key: key, Value: value, Lock: lock, IP: node.IP})
 
 	return err
 }
 
 // DeleteKey deletes a <key, value> pair from storage.
-func (node *Node) DeleteKey(key string, lock string) error {
+func (node *Node) DeleteKey(key string, lock bool) error {
 	// Obtain the context of the connection and set the timeout of the request.
 	ctx, cancel := context.WithTimeout(context.Background(), node.config.Timeout)
 	defer cancel()
 
 	log.Info("Resolving delete request.")
 
-	_, err := node.Delete(ctx, &chord.DeleteRequest{Key: key, Lock: lock})
+	_, err := node.Delete(ctx, &chord.DeleteRequest{Key: key, Lock: lock, IP: node.IP})
 
 	return err
 }
