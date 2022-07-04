@@ -11,8 +11,8 @@ import (
 	easy "github.com/t-tomalak/logrus-easy-formatter"
 )
 
-func SettingLogger(folder string) {
-	log.SetLevel(log.DebugLevel)
+func SettingLogger(level log.Level, folder string) {
+	log.SetLevel(level)
 	log.SetFormatter(&easy.Formatter{
 		TimestampFormat: "15:04:05",
 		LogFormat:       "[%lvl%]: %time% - %msg%\n",

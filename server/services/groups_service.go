@@ -43,12 +43,6 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 	generator := rand.New(seed)
 	group.Id = generator.Int63()
 
-	err = persistency.Save(node, group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
-
-	if err != nil {
-		return &proto.CreateGroupResponse{}, err
-	}
-
 	members := proto.GroupMembers{Members: make(map[int32]*proto.UserList)}
 	members.Members[int32(proto.UserLevel_ADMIN)] = &proto.UserList{}
 	members.Members[int32(proto.UserLevel_USER)] = &proto.UserList{}
@@ -75,9 +69,18 @@ func (*GroupsServer) CreateGroup(ctx context.Context, request *proto.CreateGroup
 			if _, ok := all_users[member]; ok {
 				continue
 			}
+			if !isUser(username) {
+				return &proto.CreateGroupResponse{}, status.Errorf(codes.NotFound, "User %s not found", member)
+			}
 			members.Members[int32(proto.UserLevel_ADMIN)].Users = append(members.Members[int32(proto.UserLevel_ADMIN)].Users, member)
 			all_users[member] = empty
 		}
+	}
+
+	err = persistency.Save(node, group, filepath.Join("Group", strconv.FormatInt(group.Id, 10)))
+
+	if err != nil {
+		return &proto.CreateGroupResponse{}, err
 	}
 
 	err = persistency.Save(node, &members, filepath.Join("GroupMembers", strconv.FormatInt(group.Id, 10)))
