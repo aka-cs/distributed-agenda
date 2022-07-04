@@ -8,11 +8,11 @@ client: py-protoc
 	$(make) -C ./client client python=$(python)
 
 .PHONY: server
-server: go-protoc
+server: go-protoc chord-protoc
 	$(make) -C ./server server go=$(go)
 
 .PHONY: pbc
-pbc:go-protoc py-protoc;
+pbc:go-protoc py-protoc chord-protoc;
 
 .PHONY: go-protoc
 go-protoc:

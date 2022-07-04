@@ -1,15 +1,13 @@
-from typing import Optional, List
+from typing import List
 
 import grpclib.exceptions
-
-from proto.history_pb2 import Action
-from rpc import services
-from rpc.client import Channel
-
 from google.protobuf.timestamp_pb2 import Timestamp
 
 import proto.events_grpc
 import proto.events_pb2
+from proto.history_pb2 import Action
+from rpc import services
+from rpc.client import Channel
 from rpc.history import get_history
 from rpc.requests_queue import add_request, Request, get_requests
 
@@ -75,3 +73,38 @@ async def get_user_events():
         del drafts[event.eventId]
 
     return events, drafts
+
+
+async def accept_event(event: proto.events_pb2.Event):
+    accept_event_request = proto.events_pb2.ConfirmEventRequest(eventId=event.id)
+
+    try:
+        async with Channel(services.EVENT) as channel:
+            stub = proto.events_grpc.EventsServiceStub(channel)
+            response = await stub.ConfirmEvent(accept_event_request)
+    except grpclib.exceptions.GRPCError as err:
+        if err.status == grpclib.const.Status.UNAVAILABLE:
+            return 2
+    except:
+        add_request(Request(accept_event_request, services.EVENT))
+        return 1
+
+    return 0
+
+
+async def reject_event(event: proto.events_pb2.Event):
+    reject_event_request = proto.events_pb2.RejectEventRequest(eventId=event.id)
+
+    try:
+        async with Channel(services.EVENT) as channel:
+            stub = proto.events_grpc.EventsServiceStub(channel)
+            response = await stub.RejectEvent(reject_event_request)
+    except grpclib.exceptions.GRPCError as err:
+        if err.status == grpclib.const.Status.UNAVAILABLE:
+            return 2
+    except:
+        add_request(Request(reject_event_request, services.EVENT))
+        return 1
+
+    return 0
+

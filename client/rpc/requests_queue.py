@@ -6,6 +6,7 @@ import grpclib.exceptions
 
 from rpc import services
 from rpc.client import Channel
+from rpc.history import update_history
 from store import Storage
 
 from proto.events_pb2 import CreateEventRequest, ConfirmEventRequest, RejectEventRequest
@@ -55,11 +56,13 @@ async def process_requests():
     for request in requests:
         logging.info(f"Pushing request: {request}")
         if request in conflicts:
+            logging.info("Conflict detected, skipping request")
             continue
         response = None
         try:
             match request.service:
                 case services.EVENT:
+                    logging.info("Request is for event service")
                     async with Channel(services.EVENT) as channel:
                         stub = EventsServiceStub(channel)
                         match request.request:
@@ -72,10 +75,15 @@ async def process_requests():
                                         conflicts.append(request)
                                     raise err
                             case ConfirmEventRequest():
+                                logging.info(f"Confirming event {request.request}")
                                 response = await stub.ConfirmEvent(request.request)
                             case RejectEventRequest():
+                                logging.info(f"Rejecting event {request.request}")
                                 response = await stub.RejectEvent(request.request)
-        except:
+                case _:
+                    logging.info("Request is for unknown service")
+        except BaseException as err:
+            logging.exception(f"Request processing failed with exception: {err}")
             continue
         if response:
             processed.append(request)
@@ -84,3 +92,6 @@ async def process_requests():
         remove_request(req)
 
     Storage.store('conflicts', conflicts)
+
+    if processed:
+        await update_history()
