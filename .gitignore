@@ -20,7 +20,7 @@
 # Data
 server/resources
 server/logs
-/server/chord/chord/
+#/server/chord/chord/
 /server/chord/test.go
 
 # RSA
