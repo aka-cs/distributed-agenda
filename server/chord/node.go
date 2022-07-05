@@ -249,7 +249,7 @@ func (node *Node) Get(ctx context.Context, req *chord.GetRequest) (*chord.GetRes
 
 // Set a <key, value> pair on storage.
 func (node *Node) Set(ctx context.Context, req *chord.SetRequest) (*chord.EmptyResponse, error) {
-	log.Infof("Set: key=%s value=%s.", req.Key, string(req.Value))
+	log.Infof("Set: key=%s.", req.Key)
 	address := req.IP // Obtain the requesting address.
 
 	// If block is needed.
