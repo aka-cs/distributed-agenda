@@ -32,7 +32,7 @@ If you are evaluating engineering depth, the core value is the combination of **
 ## 2) Repository structure
 
 ```text
-/home/runner/work/distributed-agenda/distributed-agenda
+<project-root>
 ├── client/                  # Streamlit frontend + async gRPC client
 ├── server/                  # Go backend services + Chord implementation
 ├── proto/                   # Shared protobuf contracts (auth/users/groups/events/history)
@@ -94,7 +94,7 @@ Because both server and client are generated from these contracts, API drift is 
 Generate bindings with:
 
 ```bash
-cd /home/runner/work/distributed-agenda/distributed-agenda
+cd <project-root>
 make pbc
 ```
 
@@ -111,7 +111,7 @@ make pbc
 ### Install dependencies
 
 ```bash
-cd /home/runner/work/distributed-agenda/distributed-agenda
+cd <project-root>
 make server-install
 make client-install
 ```
@@ -119,14 +119,14 @@ make client-install
 ### Run server
 
 ```bash
-cd /home/runner/work/distributed-agenda/distributed-agenda
+cd <project-root>
 make server
 ```
 
 ### Run client
 
 ```bash
-cd /home/runner/work/distributed-agenda/distributed-agenda
+cd <project-root>
 make client
 ```
 
@@ -233,7 +233,7 @@ This project reflects competency in:
 
 ```bash
 # From repo root:
-cd /home/runner/work/distributed-agenda/distributed-agenda
+cd <project-root>
 
 # Install dependencies
 make server-install
